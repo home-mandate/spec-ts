@@ -9,6 +9,7 @@ import { type Mandate, tryParseMandate } from "./mandate.ts";
 
 export class SignatureError extends Error {}
 
+const P256_HALF_ORDER = 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551n >> 1n;
 const KID = /^[A-Za-z0-9._-]{1,64}$/;
 const BASE64URL = /^[A-Za-z0-9_-]*$/;
 
@@ -59,9 +60,11 @@ function verifyParts(head: string, payload: Buffer, signature: string, keys: Key
   if (!entry || entry.alg !== alg) throw new SignatureError("unknown key or algorithm");
   const input = Buffer.from(head + "." + payload.toString("base64url"), "ascii");
   const sig = decode(signature);
+  // ES256: of the two values of s that verify, only the lower one is accepted.
   const ok = alg === "EdDSA"
     ? sig.length === 64 && cryptoVerify(null, input, entry.key, sig)
-    : sig.length === 64 && cryptoVerify("sha256", input, { key: entry.key, dsaEncoding: "ieee-p1363" }, sig);
+    : sig.length === 64 && BigInt("0x" + sig.subarray(32).toString("hex")) <= P256_HALF_ORDER &&
+      cryptoVerify("sha256", input, { key: entry.key, dsaEncoding: "ieee-p1363" }, sig);
   if (!ok) throw new SignatureError("signature does not verify");
   return kid;
 }

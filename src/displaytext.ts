@@ -22,8 +22,9 @@ export function displayable(text: string): boolean {
   if (points.length === 0) return false;
   const joiner = (cp: number) => codepoints.joiners.includes(cp);
   for (const edge of [points[0]!, points[points.length - 1]!]) {
-    if (inRanges(codepoints.white_space, edge) || joiner(edge)) return false;
+    if (edge === 0x20 || joiner(edge)) return false;
   }
+  if (inRanges(codepoints.not_first, points[0]!)) return false;
   let afterJoiner = false;
   for (const cp of points) {
     if (inRanges(codepoints.forbidden, cp)) return false;

@@ -37,7 +37,7 @@ export const vocabulary = readJson<VocabularyFile>("vocabulary/v0.json").categor
 interface CodepointFile {
   forbidden: [number, number][];
   joiners: number[];
-  white_space: [number, number][];
+  not_first: [number, number][];
 }
 
 export const codepoints = readJson<CodepointFile>("data/forbidden-codepoints-v0.json");

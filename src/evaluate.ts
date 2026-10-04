@@ -151,6 +151,7 @@ function looseSubject(text: string): { clientId: string; principal: string } | n
 /** Succession (SPEC-v0 section 3.5): may offered replace stored? */
 export function isSuccessor(stored: Mandate, offered: Mandate | null): boolean {
   if (!offered || offered.id !== stored.id) return false;
+  if (offered.clientId !== stored.clientId || offered.principal !== stored.principal) return false;
   if (stored.version === 0) return true;
   return offered.issuer === stored.issuer && offered.version > stored.version;
 }
