@@ -2,8 +2,8 @@
 name: CI
 
 # Type check, the conformance files against the library, and the test tool of the
-# specification against the harness. SPEC_VERSION is the tag of mandate-spec whose
-# files are in spec/.
+# specification against the harness. The tag of mandate-spec whose files are in spec/ is
+# "mandateSpec" in package.json; the test tool of that tag is used.
 on:
   push:
     branches: ["**"]
@@ -17,9 +17,6 @@ permissions:
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
-
-env:
-  SPEC_VERSION: v0.2.0-alpha.1
 
 jobs:
   check:
@@ -43,7 +40,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test
-      - run: go install github.com/mandate-spec/mandate-spec/cmd/mandate-conformance@${SPEC_VERSION}
+      - run: |
+          spec="$(node -p 'require("./package.json").mandateSpec')"
+          case "$spec" in v[0-9]*) ;; *) echo "mandateSpec in package.json is not a tag: $spec"; exit 1 ;; esac
+          go install "github.com/mandate-spec/mandate-spec/cmd/mandate-conformance@$spec"
       - run: >
           "$(go env GOPATH)/bin/mandate-conformance" -report report.json
           -classes evaluator,selection,signatures,audit,audit-anchored
