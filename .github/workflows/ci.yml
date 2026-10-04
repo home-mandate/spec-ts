@@ -1,14 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 name: CI
 
-# Type check, the conformance files against the library, and the test tool of the
-# specification against the harness. The tag of mandate-spec whose files are in spec/ is
-# "mandateSpec" in package.json; the test tool of that tag is used.
+# Unit stage: type check and the conformance files against the library, on every push to
+# a branch other than main. Changes reach main only through a pull request, so there is no
+# run after the merge. The test tool of the specification runs in integration.yml.
 on:
   push:
-    branches: ["**"]
-  pull_request:
-    branches: [main]
+    branches-ignore: [main]
   workflow_dispatch:
 
 permissions:
@@ -20,9 +18,9 @@ concurrency:
 
 jobs:
   check:
-    name: Type check, tests, conformance
+    name: Type check and tests
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -34,17 +32,6 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: stable
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test
-      - run: |
-          spec="$(node -p 'require("./package.json").mandateSpec')"
-          case "$spec" in v[0-9]*) ;; *) echo "mandateSpec in package.json is not a tag: $spec"; exit 1 ;; esac
-          go install "github.com/mandate-spec/mandate-spec/cmd/mandate-conformance@$spec"
-      - run: >
-          "$(go env GOPATH)/bin/mandate-conformance" -report report.json
-          -classes evaluator,selection,signatures,audit,audit-anchored
-          -exec node src/harness.ts
