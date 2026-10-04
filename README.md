@@ -64,6 +64,14 @@ release names it:
 test tool of that tag. The harness reports the version of this implementation, so a conformance
 report names both.
 
+## Contributing
+
+Changes go through a pull request from a short-lived branch (`feature/…`, `fix/…`, `ci/…`)
+against `main`, which is protected: no direct pushes, squash merge only, every required check
+green and the branch up to date. A push to a branch runs the type check and the tests
+(`ci.yml`); a pull request additionally runs the test tool of the specification
+(`integration.yml`).
+
 ## Requirements
 
 Node.js 24 or newer; the sources are TypeScript that Node runs directly. One runtime
