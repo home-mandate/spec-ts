@@ -58,6 +58,10 @@ function check(text: string): { link?: Link; seq: number } {
     isObject(value.approval) ? value.approval.by : undefined,
   ];
   if (displayed.some((text) => typeof text === "string" && !displayable(text))) return { seq };
+  // A former identifier differs from the current one (SPEC-v0 section 9.1); JSON Schema
+  // cannot compare two members.
+  const directory = isObject(value.directory) ? value.directory : undefined;
+  if (directory?.previous_entity_id !== undefined && directory.previous_entity_id === directory.entity_id) return { seq };
   let entryDigest: string;
   try {
     entryDigest = digest(value);
