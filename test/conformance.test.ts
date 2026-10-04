@@ -3,6 +3,7 @@
 // Runs the conformance files of the specification (spec/conformance) against the
 // library directly. The test tool of the specification runs the same cases through the
 // harness; see README.
+import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
@@ -96,8 +97,11 @@ test("audit logs", () => {
 });
 
 test("harness answers every operation and rejects unknown ones", () => {
-  const caps = answer({ op: "capabilities" }) as { ops: string[] };
+  const caps = answer({ op: "capabilities" }) as { ops: string[]; version: string };
   assert.equal(caps.ops.length, 7);
+  const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string; mandateSpec: string };
+  assert.equal(caps.version, pkg.version);
+  assert.match(pkg.mandateSpec, /^v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/);
   assert.deepEqual(answer({ op: "dance" }), { error: "unsupported" });
   assert.deepEqual(answer({ op: "validate", mandate: "{" }), { valid: false });
   assert.deepEqual(answer({ op: "entry_digest", entry: '{"a":1,"a":2}' }), { valid: false });

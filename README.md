@@ -48,6 +48,22 @@ mandate-conformance -classes evaluator,selection,signatures,audit,audit-anchored
 
 `src/harness.ts` implements the process binding of the test interface (SPEC-v0 section 10.2).
 
+## Versions
+
+This implementation has version numbers of its own (semantic versioning, `package.json`
+`version`, tags `v0.1.0-alpha.1`, …), independent of the tags of the specification: a fix here
+needs no new specification, and a clarification of the specification no new release here.
+Which version of the specification it implements is `mandateSpec` in `package.json`, and every
+release names it:
+
+| mandate-spec-ts | implements mandate-spec |
+|---|---|
+| v0.1.0-alpha.1 | v0.2.0-alpha.2 |
+
+`spec/` holds exactly the files of that tag (checked against its manifest), and CI runs the
+test tool of that tag. The harness reports the version of this implementation, so a conformance
+report names both.
+
 ## Requirements
 
 Node.js 24 or newer; the sources are TypeScript that Node runs directly. One runtime

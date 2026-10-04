@@ -3,12 +3,16 @@
 
 // Harness for the process binding of the test interface (SPEC-v0 section 10.2): one
 // JSON request per line on standard input, one JSON response per line on standard output.
+import { readFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { entryDigest, verifyAudit, verifyAuditLines, type Anchor } from "./audit.ts";
 import { evaluate, isSuccessor, selectAndEvaluate, type Request, type Result } from "./evaluate.ts";
 import { type Json } from "./ijson.ts";
 import { parseJwks, verifySigned } from "./jws.ts";
 import { tryParseMandate } from "./mandate.ts";
+
+// The version of this implementation, from package.json, so that it is stated once.
+const VERSION = (JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string }).version;
 
 interface Message {
   op: string;
@@ -40,7 +44,7 @@ function outcome(r: Result): object {
 export function answer(m: Message): object {
   switch (m.op) {
     case "capabilities":
-      return { name: "mandate-spec-ts", version: "0.2.0-alpha.1", ops: OPS };
+      return { name: "mandate-spec-ts", version: VERSION, ops: OPS };
     case "validate": {
       const mandate = tryParseMandate(m.mandate ?? "");
       return mandate ? { valid: true, digest: mandate.digest } : { valid: false };
