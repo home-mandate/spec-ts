@@ -70,7 +70,8 @@ Changes go through a pull request from a short-lived branch (`feature/…`, `fix
 against `main`, which is protected: no direct pushes, squash merge only, every required check
 green and the branch up to date. A push to a branch runs the type check and the tests
 (`ci.yml`); a pull request additionally runs the test tool of the specification
-(`integration.yml`).
+(`integration.yml`). Nothing runs after the merge, and every merge is tagged. Independent of
+changes, `pnpm audit` runs every night (`scheduled.yml`); a failure opens an issue.
 
 ## Requirements
 
