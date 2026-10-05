@@ -16,7 +16,7 @@
     "sync-spec": "node scripts/sync-spec.ts"
   },
   "dependencies": {
-    "ajv": "8.17.1"
+    "ajv": "8.20.0"
   },
   "devDependencies": {
     "@types/node": "24.0.0",
