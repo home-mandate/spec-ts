@@ -30,16 +30,17 @@ export interface Codepoints {
   not_first: readonly (readonly [number, number])[];
 }
 
-// The modules are shared by every importer: frozen, so that no caller can change the
-// vocabulary the evaluation uses.
-function deepFreeze<T>(value: T): T {
-  if (typeof value === "object" && value !== null) {
-    for (const child of Object.values(value)) deepFreeze(child);
-    Object.freeze(value);
-  }
-  return value;
+// The JSON modules are shared by every importer, so the library works on frozen copies:
+// no caller can change the vocabulary the evaluation uses. Objects have no prototype, so
+// that a name such as "constructor" or "toString" is not found in them.
+function frozenCopy(value: unknown): unknown {
+  if (Array.isArray(value)) return Object.freeze(value.map(frozenCopy));
+  if (typeof value !== "object" || value === null) return value;
+  const copy: Record<string, unknown> = Object.create(null);
+  for (const [key, child] of Object.entries(value)) copy[key] = frozenCopy(child);
+  return Object.freeze(copy);
 }
 
-export const vocabulary: Vocabulary = deepFreeze(vocabularyFile.categories) as Vocabulary;
+export const vocabulary: Vocabulary = frozenCopy(vocabularyFile.categories) as Vocabulary;
 
-export const codepoints: Codepoints = deepFreeze(codepointFile) as unknown as Codepoints;
+export const codepoints: Codepoints = frozenCopy(codepointFile) as Codepoints;
