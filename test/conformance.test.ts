@@ -6,72 +6,13 @@
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  entryDigest, evaluate, isSuccessor, parseJwks, selectAndEvaluate, tryParseMandate, verifyAudit, verifyAuditLines, verifySigned,
-  type Json, type Request,
-} from "../src/index.ts";
+import * as library from "../src/index.ts";
+import { entryDigest, parseJwks, verifyAudit, verifyAuditLines, verifySigned, type Json } from "../src/index.ts";
 import { answer } from "../src/harness.ts";
 import { specFile } from "../src/spec.ts";
+import { type Case, cases, mandateConformance } from "./cases.ts";
 
-type Case = Record<string, any>;
-
-function cases(path: string, key = "cases"): Case[] {
-  const list = JSON.parse(specFile(path))[key] as Case[];
-  assert.ok(list.length > 0, `${path} has no cases`);
-  return list;
-}
-
-function mandateText(c: Case): string {
-  if (c.mandate) return specFile(c.mandate);
-  return c.mandate_raw ?? JSON.stringify(c.mandate_inline);
-}
-
-function request(c: Case): Request {
-  return { resource: c.resource, action: c.action, parameters: c.parameters, time: c.time, timezone: c.timezone, revoked: c.revoked };
-}
-
-function assertOutcome(c: Case, result: ReturnType<typeof evaluate>): void {
-  assert.equal(result.decision, c.expected, c.why);
-  assert.equal(result.reason, c.reason, c.why);
-  if ("rule_id" in c) assert.equal(result.rule_id ?? null, c.rule_id);
-  if (c.approval_timeout) assert.equal(result.approval?.timeout, c.approval_timeout);
-  assert.equal(result.approval !== undefined, result.decision === "ask");
-}
-
-test("evaluation cases", () => {
-  for (const c of cases("conformance/cases-v0.json")) {
-    assertOutcome(c, evaluate(tryParseMandate(mandateText(c)), request(c)));
-  }
-});
-
-test("invalid mandates are rejected", () => {
-  for (const c of cases("conformance/invalid-v0.json")) {
-    assert.equal(tryParseMandate(mandateText(c)), null, `${c.id}: ${c.why}`);
-  }
-});
-
-test("digests", () => {
-  for (const c of cases("conformance/digest-v0.json")) {
-    assert.equal(tryParseMandate(mandateText(c))?.digest, c.digest, `${c.id}: ${c.why}`);
-  }
-});
-
-test("selection of the mandate", () => {
-  for (const c of cases("conformance/selection-v0.json")) {
-    const stored = c.mandates.map((m: Case) => ({ mandate: JSON.stringify(m.mandate_inline), revoked: m.revoked }));
-    const { selected, result } = selectAndEvaluate(stored, c.subject.client_id, c.subject.principal, request(c));
-    assertOutcome(c, result);
-    assert.equal(selected?.id ?? null, c.selected, `${c.id}: ${c.why}`);
-  }
-});
-
-test("succession of versions", () => {
-  for (const c of cases("conformance/succession-v0.json")) {
-    const stored = tryParseMandate(JSON.stringify(c.stored));
-    assert.ok(stored);
-    assert.equal(isSuccessor(stored, tryParseMandate(JSON.stringify(c.offered))), c.expected === "accept", `${c.id}: ${c.why}`);
-  }
-});
+mandateConformance("node entry", library);
 
 test("signed mandates", () => {
   for (const c of cases("conformance/signed-v0.json")) {

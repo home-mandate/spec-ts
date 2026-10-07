@@ -5,7 +5,10 @@ import { displayable } from "./displaytext.ts";
 import { isObject, type Json, parseJson } from "./ijson.ts";
 import { canonicalize, digest } from "./jcs.ts";
 import { type Keys, verifyDetached } from "./jws.ts";
-import { auditSchema } from "./spec.ts";
+import { validateAudit } from "./generated/audit-validator.ts";
+import type { SchemaValidator } from "./schema-runtime.ts";
+
+const auditSchema: SchemaValidator = validateAudit;
 
 const MAX_ENTRY_BYTES = 64 * 1024;
 

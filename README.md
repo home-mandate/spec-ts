@@ -8,10 +8,11 @@ It exists for two reasons:
 
 - **A second implementation finds what one implementation cannot.** It shares no code with the
   Go reference. It validates with the normative JSON Schemas and an ECMA-262 regular expression
-  engine, computes time zones with `Intl` and signatures with `node:crypto`. Where the two
-  disagree, the specification is ambiguous, and the disagreement becomes a conformance case.
+  engine, computes time zones with `Intl`, digests with its own SHA-256 and signatures with
+  `node:crypto`. Where the two disagree, the specification is ambiguous, and the disagreement
+  becomes a conformance case.
 - **Use in JavaScript and TypeScript**, for example to check a mandate in a user interface
-  before it is stored.
+  before it is stored, also in a web browser (see below).
 
 Status: draft, like the specification. Not published to a registry yet.
 
@@ -34,11 +35,36 @@ The resource (category, area, critical marking), the time and the time zone are 
 the caller from its own directory, clock and configuration, never taken from the agent
 (SPEC-v0 section 4).
 
+### In a web browser
+
+`@mandate-spec/mandate-spec/browser` (`src/browser.ts`) offers validation, digest, evaluation,
+selection, succession and the vocabulary, without signatures and audit logs:
+
+```ts
+import { evaluate, isCritical, MandateError, parseMandate, vocabulary } from "@mandate-spec/mandate-spec/browser";
+
+try {
+  const mandate = parseMandate(text);
+} catch (e) {
+  if (e instanceof MandateError) show(e.message); // e.g. "violates the schema at /rules/0: must have required property 'id'"
+}
+```
+
+Its import graph contains no Node.js built-in modules and no packages, and nothing compiles
+code at run time, so it runs under a Content Security Policy of `script-src 'self'` without
+`'unsafe-eval'`: the files of the specification are imported as JSON modules
+(`with { type: "json" }`), the JSON Schema validators are generated ahead of time with Ajv's
+standalone code (`src/generated/`, `node scripts/generate-validators.ts`) and SHA-256 is
+implemented in `src/sha256.ts`. The sources are TypeScript; a bundler such as Vite or esbuild
+compiles them. `test/browser.test.ts` checks the import graph and runs the conformance cases of
+the specification against this entry, also with code generation from strings disallowed.
+
 ## Conformance
 
 `spec/` holds the machine-readable files of the specification, copied with
 `node scripts/sync-spec.ts <path to mandate-spec>`, which checks every file against the
-manifest of the specification.
+manifest of the specification and regenerates the schema validators in `src/generated/`; a
+test fails if they are not current with `spec/schema/`.
 
 ```
 node --test test/*.test.ts                    # the conformance files against the library
@@ -59,6 +85,7 @@ release names it:
 | mandate-spec-ts | implements mandate-spec |
 |---|---|
 | v0.1.0-alpha.1 | v0.2.0-alpha.2 |
+| v0.1.0-alpha.2 | v0.2.0-alpha.4 |
 
 `spec/` holds exactly the files of that tag (checked against its manifest), and CI runs the
 test tool of that tag. The harness reports the version of this implementation, so a conformance
@@ -75,8 +102,9 @@ changes, `pnpm audit` runs every night (`scheduled.yml`); a failure opens an iss
 
 ## Requirements
 
-Node.js 24 or newer; the sources are TypeScript that Node runs directly. One runtime
-dependency: `ajv` for JSON Schema.
+Node.js 24 or newer, or a current web browser for the browser entry; the sources are
+TypeScript that Node runs directly. No runtime dependencies: `ajv` generates the schema
+validators at development time.
 
 ## License
 

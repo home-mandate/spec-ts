@@ -2,14 +2,18 @@
 
 // Validity of a mandate (SPEC-v0 section 3.1) and its digest (section 3.2).
 import { displayable } from "./displaytext.ts";
-import { isObject, type Json, JsonError, parseJson } from "./ijson.ts";
+import { isObject, type Json, JsonError, parseJson, utf8Length } from "./ijson.ts";
 import { digest } from "./jcs.ts";
-import { mandateSchema, vocabulary } from "./spec.ts";
+import { validateMandate } from "./generated/mandate-validator.ts";
+import { describeViolation, type SchemaValidator } from "./schema-runtime.ts";
+import { vocabulary } from "./spec-data.ts";
 import { type Instant, parseTimestamp } from "./time.ts";
 
 export class MandateError extends Error {}
 
 const MAX_BYTES = 256 * 1024;
+
+const mandateSchema: SchemaValidator = validateMandate;
 
 export type Decision = "allow" | "ask" | "deny";
 
@@ -121,7 +125,7 @@ function rule(raw: { [key: string]: Json }): Rule {
 
 /** Parses and validates a mandate; throws MandateError if it is not valid. */
 export function parseMandate(text: string): Mandate {
-  if (Buffer.byteLength(text, "utf8") > MAX_BYTES) fail("larger than 256 KiB");
+  if (utf8Length(text) > MAX_BYTES) fail("larger than 256 KiB");
   if (!text.isWellFormed()) fail("not UTF-8");
   let value: Json;
   try {
@@ -130,7 +134,7 @@ export function parseMandate(text: string): Mandate {
     if (e instanceof JsonError) fail(`not I-JSON: ${e.message}`);
     throw e;
   }
-  if (!mandateSchema(value) || !isObject(value)) fail("violates the schema");
+  if (!mandateSchema(value) || !isObject(value)) fail(`violates the schema at ${describeViolation(mandateSchema)}`);
   const validFrom = parseTimestamp(value.valid_from as string)!;
   const expires = typeof value.expires === "string" ? parseTimestamp(value.expires)! : null;
   if (expires && expires.ns <= validFrom.ns) fail("expires must be after valid_from");
