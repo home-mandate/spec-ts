@@ -62,6 +62,17 @@ function matches(rule: Rule, req: Request, local: LocalTime): boolean {
   });
 }
 
+/**
+ * Whether the action is critical (SPEC-v0 section 4, step 5): the vocabulary marks it
+ * critical, or the directory marks the resource critical and the action is not read.
+ * False for a category or an action the vocabulary does not contain.
+ */
+export function isCritical(resource: Pick<Resource, "category" | "critical">, action: string): boolean {
+  const known = resource.category === undefined ? undefined : vocabulary[resource.category]?.actions[action];
+  if (!known) return false;
+  return known.critical === true || (resource.critical === true && action !== "read");
+}
+
 function deny(reason: string, mandate?: Mandate): Result {
   return mandate ? { decision: "deny", reason, mandate_digest: mandate.digest } : { decision: "deny", reason };
 }
@@ -94,8 +105,7 @@ export function evaluate(mandate: Mandate | null, req: Request): Result {
   if (final === "ask") {
     result.approval = matched.find((r) => r.decision === "ask" && r.approval)?.approval ?? mandate.approval;
   }
-  const critical = action.critical === true || (req.resource.critical === true && req.action !== "read");
-  if (final === "allow" && critical) {
+  if (final === "allow" && isCritical(req.resource, req.action)) {
     const unprotected = matched.find((r) => !r.allowCritical);
     if (unprotected) {
       return { decision: "ask", reason: "critical_demotion", rule_id: unprotected.id, approval: mandate.approval, mandate_digest: mandate.digest };

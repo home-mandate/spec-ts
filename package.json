@@ -7,10 +7,10 @@
   "private": true,
   "type": "module",
   "engines": { "node": ">=24" },
-  "exports": { ".": "./src/index.ts" },
+  "exports": { ".": "./src/index.ts", "./browser": "./src/browser.ts" },
   "bin": { "mandate-harness-ts": "./src/harness.ts" },
   "scripts": {
-    "test": "node --test test/*.test.ts",
+    "test": "node --test test/*.test.ts && node --disallow-code-generation-from-strings --test test/browser.test.ts",
     "typecheck": "tsc --noEmit",
     "harness": "node src/harness.ts",
     "sync-spec": "node scripts/sync-spec.ts",
