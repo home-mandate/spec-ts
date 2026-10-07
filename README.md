@@ -85,7 +85,9 @@ release names it:
 | mandate-spec-ts | implements mandate-spec |
 |---|---|
 | v0.1.0-alpha.1 | v0.2.0-alpha.2 |
-| v0.1.0-alpha.2 | v0.2.0-alpha.4 |
+| v0.1.0-alpha.2 | v0.2.0-alpha.2 |
+| v0.1.0-alpha.3 | v0.2.0-alpha.4 |
+| v0.1.0-alpha.4 | v0.2.0-alpha.5 |
 
 `spec/` holds exactly the files of that tag (checked against its manifest), and CI runs the
 test tool of that tag. The harness reports the version of this implementation, so a conformance
