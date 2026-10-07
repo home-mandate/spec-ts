@@ -2,9 +2,9 @@
 
 // Text displayed to humans (SPEC-v0 section 3.1 item 8), checked against the code point
 // list of the specification, not against the Unicode tables of the runtime.
-import { codepoints } from "./spec.ts";
+import { codepoints } from "./spec-data.ts";
 
-function inRanges(ranges: [number, number][], cp: number): boolean {
+function inRanges(ranges: readonly (readonly [number, number])[], cp: number): boolean {
   let low = 0;
   let high = ranges.length - 1;
   while (low <= high) {

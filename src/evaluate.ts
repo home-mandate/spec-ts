@@ -4,7 +4,7 @@
 import type { Approval, Decision, Mandate, Rule } from "./mandate.ts";
 import { tryParseMandate } from "./mandate.ts";
 import { parseJson, isObject } from "./ijson.ts";
-import { vocabulary } from "./spec.ts";
+import { vocabulary } from "./spec-data.ts";
 import { type Instant, type LocalTime, localTime, parseTimestamp } from "./time.ts";
 
 export interface Resource {

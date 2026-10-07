@@ -134,3 +134,13 @@ class Parser {
 export function isObject(v: Json | undefined): v is { [key: string]: Json } {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
+
+/** Length of the text in UTF-8 bytes; a lone surrogate counts as its replacement character (3 bytes). */
+export function utf8Length(text: string): number {
+  let bytes = 0;
+  for (const c of text) {
+    const code = c.codePointAt(0)!;
+    bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
+  }
+  return bytes;
+}

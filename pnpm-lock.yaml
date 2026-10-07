@@ -7,14 +7,13 @@ settings:
 importers:
 
   .:
-    dependencies:
-      ajv:
-        specifier: 8.20.0
-        version: 8.20.0
     devDependencies:
       '@types/node':
         specifier: 24.0.0
         version: 24.0.0
+      ajv:
+        specifier: 8.20.0
+        version: 8.20.0
       typescript:
         specifier: 5.8.3
         version: 5.8.3

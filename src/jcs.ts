@@ -2,8 +2,8 @@
 
 // JSON Canonicalization Scheme (RFC 8785) for the documents of mandate-spec, which
 // contain only integers (SPEC-v0 section 3.2), and the digests built on it.
-import { createHash } from "node:crypto";
 import { type Json, JsonError } from "./ijson.ts";
+import { sha256Hex } from "./sha256.ts";
 
 export function canonicalize(value: Json): string {
   if (value === null || typeof value === "boolean") return String(value);
@@ -36,5 +36,5 @@ function canonicalString(s: string): string {
 }
 
 export function digest(value: Json): string {
-  return "sha256:" + createHash("sha256").update(canonicalize(value), "utf8").digest("hex");
+  return "sha256:" + sha256Hex(new TextEncoder().encode(canonicalize(value)));
 }
