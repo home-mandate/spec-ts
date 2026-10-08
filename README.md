@@ -1,6 +1,6 @@
-# mandate-spec-ts
+# Home-Mandate Specification: TypeScript implementation
 
-An independent TypeScript implementation of [mandate-spec](https://github.com/mandate-spec/mandate-spec) v0:
+An independent TypeScript implementation of the [Home-Mandate Specification](https://github.com/home-mandate/spec) v0:
 validation of mandates, digests, the evaluation rule, the selection of the mandate, verification of
 audit logs with checkpoints, and signed mandates.
 
@@ -19,7 +19,7 @@ Status: draft, like the specification. Not published to a registry yet.
 ## Use
 
 ```ts
-import { evaluate, parseMandate } from "@mandate-spec/mandate-spec";
+import { evaluate, parseMandate } from "@home-mandate/spec";
 
 const mandate = parseMandate(text); // throws MandateError if the mandate is not valid
 const result = evaluate(mandate, {
@@ -37,11 +37,11 @@ the caller from its own directory, clock and configuration, never taken from the
 
 ### In a web browser
 
-`@mandate-spec/mandate-spec/browser` (`src/browser.ts`) offers validation, digest, evaluation,
+`@home-mandate/spec/browser` (`src/browser.ts`) offers validation, digest, evaluation,
 selection, succession and the vocabulary, without signatures and audit logs:
 
 ```ts
-import { evaluate, isCritical, MandateError, parseMandate, vocabulary } from "@mandate-spec/mandate-spec/browser";
+import { evaluate, isCritical, MandateError, parseMandate, vocabulary } from "@home-mandate/spec/browser";
 
 try {
   const mandate = parseMandate(text);
@@ -62,7 +62,7 @@ the specification against this entry, also with code generation from strings dis
 ## Conformance
 
 `spec/` holds the machine-readable files of the specification, copied with
-`node scripts/sync-spec.ts <path to mandate-spec>`, which checks every file against the
+`node scripts/sync-spec.ts <path to the specification repository>`, which checks every file against the
 manifest of the specification and regenerates the schema validators in `src/generated/`; a
 test fails if they are not current with `spec/schema/`.
 
@@ -79,15 +79,16 @@ mandate-conformance -classes evaluator,selection,signatures,audit,audit-anchored
 This implementation has version numbers of its own (semantic versioning, `package.json`
 `version`, tags `v0.1.0-alpha.1`, …), independent of the tags of the specification: a fix here
 needs no new specification, and a clarification of the specification no new release here.
-Which version of the specification it implements is `mandateSpec` in `package.json`, and every
+Which version of the specification it implements is `homeMandateSpec` in `package.json`, and every
 release names it:
 
-| mandate-spec-ts | implements mandate-spec |
+| spec-ts | implements the Home-Mandate Specification |
 |---|---|
-| v0.1.0-alpha.1 | v0.2.0-alpha.2 |
-| v0.1.0-alpha.2 | v0.2.0-alpha.2 |
-| v0.1.0-alpha.3 | v0.2.0-alpha.4 |
-| v0.1.0-alpha.4 | v0.2.0-alpha.5 |
+| v0.1.0-alpha.1 | v0.1.0-alpha.1 |
+
+Version numbers restarted with the rename from mandate-spec. Earlier releases as mandate-spec-ts
+(v0.1.0-alpha.1 to v0.1.0-alpha.4, implementing mandate-spec v0.2.0-alpha.2 to v0.2.0-alpha.5)
+are marked by the tag `archive/mandate-spec-ts-v0.1.0-alpha.4`.
 
 `spec/` holds exactly the files of that tag (checked against its manifest), and CI runs the
 test tool of that tag. The harness reports the version of this implementation, so a conformance

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// The part of JSON Web Signature that mandate-spec uses (SPEC-v0 sections 7.1 and 9.5):
+// The part of JSON Web Signature that the Home-Mandate Specification uses (SPEC-v0 sections 7.1 and 9.5):
 // compact serialization, also with detached payload, EdDSA (Ed25519) and ES256.
 import { createPublicKey, type KeyObject, verify as cryptoVerify } from "node:crypto";
 import { isObject, type Json, parseJson } from "./ijson.ts";

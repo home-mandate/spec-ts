@@ -1,8 +1,8 @@
 {
-  "name": "@mandate-spec/mandate-spec",
-  "version": "0.1.0-alpha.4",
-  "mandateSpec": "v0.2.0-alpha.5",
-  "description": "Independent TypeScript implementation of mandate-spec v0: validation, digest, evaluation, selection, audit log verification, signatures.",
+  "name": "@home-mandate/spec",
+  "version": "0.1.0-alpha.1",
+  "homeMandateSpec": "v0.1.0-alpha.1",
+  "description": "Independent TypeScript implementation of the Home-Mandate Specification v0: validation, digest, evaluation, selection, audit log verification, signatures.",
   "license": "Apache-2.0",
   "private": true,
   "type": "module",
