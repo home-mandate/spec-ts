@@ -82,7 +82,7 @@ needs no new specification, and a clarification of the specification no new rele
 Which version of the specification it implements is `homeMandateSpec` in `package.json`, and every
 release names it:
 
-| spec-ts | implements the Home-Mandate Specification |
+| This implementation | implements the Home-Mandate Specification |
 |---|---|
 | v0.1.0-alpha.1 | v0.1.0-alpha.1 |
 
