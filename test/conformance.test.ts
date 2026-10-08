@@ -40,9 +40,9 @@ test("audit logs", () => {
 test("harness answers every operation and rejects unknown ones", () => {
   const caps = answer({ op: "capabilities" }) as { ops: string[]; version: string };
   assert.equal(caps.ops.length, 7);
-  const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string; mandateSpec: string };
+  const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string; homeMandateSpec: string };
   assert.equal(caps.version, pkg.version);
-  assert.match(pkg.mandateSpec, /^v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/);
+  assert.match(pkg.homeMandateSpec, /^v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/);
   assert.deepEqual(answer({ op: "dance" }), { error: "unsupported" });
   assert.deepEqual(answer({ op: "validate", mandate: "{" }), { valid: false });
   assert.deepEqual(answer({ op: "entry_digest", entry: '{"a":1,"a":2}' }), { valid: false });

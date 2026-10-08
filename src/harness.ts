@@ -44,7 +44,7 @@ function outcome(r: Result): object {
 export function answer(m: Message): object {
   switch (m.op) {
     case "capabilities":
-      return { name: "mandate-spec-ts", version: VERSION, ops: OPS };
+      return { name: "home-mandate-spec-ts", version: VERSION, ops: OPS };
     case "validate": {
       const mandate = tryParseMandate(m.mandate ?? "");
       return mandate ? { valid: true, digest: mandate.digest } : { valid: false };

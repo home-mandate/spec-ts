@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { test } from "node:test";
 import ts from "typescript";
-import * as browser from "@mandate-spec/mandate-spec/browser";
+import * as browser from "@home-mandate/spec/browser";
 import { mandateConformance } from "./cases.ts";
 
 const ROOT = resolve(import.meta.dirname, "..");

@@ -106,7 +106,7 @@ export function verifyAudit(entries: string[], anchor?: Anchor): AuditResult {
     if (logId === "") logId = cp.log_id;
     let ok = cp.log_id === logId;
     if (ok && anchor) {
-      const payload = canonicalize({ type: "https://mandate-spec.org/audit-checkpoint/v0", log_id: cp.log_id, seq: l.seq - 1, digest: l.prev });
+      const payload = canonicalize({ type: "https://home-mandate.org/audit-checkpoint/v0", log_id: cp.log_id, seq: l.seq - 1, digest: l.prev });
       try {
         verifyDetached(cp.signature, payload, anchor.keys);
         anchored = l.seq - 1;

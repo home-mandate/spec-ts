@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// JSON Canonicalization Scheme (RFC 8785) for the documents of mandate-spec, which
+// JSON Canonicalization Scheme (RFC 8785) for the documents of the Home-Mandate Specification, which
 // contain only integers (SPEC-v0 section 3.2), and the digests built on it.
 import { type Json, JsonError } from "./ijson.ts";
 import { sha256Hex } from "./sha256.ts";

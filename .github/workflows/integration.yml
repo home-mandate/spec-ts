@@ -2,7 +2,7 @@
 name: Integration
 
 # The test tool of the specification against the harness, for every push into a pull
-# request against main. The tag of mandate-spec whose files are in spec/ is "mandateSpec"
+# request against main. The tag of the Home-Mandate Specification whose files are in spec/ is "homeMandateSpec"
 # in package.json; the test tool of that tag is used. No run after the merge.
 on:
   pull_request:
@@ -38,9 +38,9 @@ jobs:
           go-version: stable
       - run: pnpm install --frozen-lockfile
       - run: |
-          spec="$(node -p 'require("./package.json").mandateSpec')"
-          case "$spec" in v[0-9]*) ;; *) echo "mandateSpec in package.json is not a tag: $spec"; exit 1 ;; esac
-          go install "github.com/mandate-spec/mandate-spec/cmd/mandate-conformance@$spec"
+          spec="$(node -p 'require("./package.json").homeMandateSpec')"
+          case "$spec" in v[0-9]*) ;; *) echo "homeMandateSpec in package.json is not a tag: $spec"; exit 1 ;; esac
+          go install "github.com/home-mandate/spec/cmd/mandate-conformance@$spec"
       - run: >
           "$(go env GOPATH)/bin/mandate-conformance" -report report.json
           -classes evaluator,selection,signatures,audit,audit-anchored

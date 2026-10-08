@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Entry point for web browsers ("@mandate-spec/mandate-spec/browser"): validation of
+// Entry point for web browsers ("@home-mandate/spec/browser"): validation of
 // mandates, their digest, the evaluation rule and the vocabulary, without Node.js built-in
 // modules and without code compiled at run time, so that it runs under a Content Security
 // Policy of script-src 'self'. Signatures and audit logs are in the Node.js entry only.
