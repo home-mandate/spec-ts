@@ -37,6 +37,11 @@ test("audit logs", () => {
   assert.ok(text.includes('"seq": 1.0'), "the number spelling cases are part of the file");
 });
 
+test("audit cases for template and approver changes are part of the file", () => {
+  const ids = new Set(cases("conformance/audit-v0.json", "logs").map((c) => c.id as string));
+  for (let n = 58; n <= 76; n++) assert.ok(ids.has(`a${n}`), `a${n} is missing`);
+});
+
 test("harness answers every operation and rejects unknown ones", () => {
   const caps = answer({ op: "capabilities" }) as { ops: string[]; version: string };
   assert.equal(caps.ops.length, 7);
