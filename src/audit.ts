@@ -45,6 +45,38 @@ export function entryDigest(text: string): string {
   return digest(parseJson(text));
 }
 
+/** Members that user interfaces show to humans: member, field (SPEC-v0 section 3.1 item 8). */
+const DISPLAYED_FIELDS = [
+  ["actor", "id"], ["agent", "display_name"], ["approval", "by"], ["template", "name"], ["approver", "id"],
+] as const;
+
+/** Members of a change that name the former value next to the current one: member, current, former (SPEC-v0 section 9.1). */
+const FORMER_VALUES = [
+  ["directory", "entity_id", "previous_entity_id"],
+  ["template", "digest", "previous_digest"],
+] as const;
+
+function member(entry: { [key: string]: Json }, name: string): { [key: string]: Json } | undefined {
+  const value = entry[name];
+  return isObject(value) ? value : undefined;
+}
+
+/** Whether every displayed member follows the rule for displayed text. */
+function displayedTextValid(entry: { [key: string]: Json }): boolean {
+  return DISPLAYED_FIELDS.every(([name, field]) => {
+    const text = member(entry, name)?.[field];
+    return typeof text !== "string" || displayable(text);
+  });
+}
+
+/** Whether every change that names a former value names one other than the current one; JSON Schema cannot compare two members. */
+function formerValuesDistinct(entry: { [key: string]: Json }): boolean {
+  return FORMER_VALUES.every(([name, current, former]) => {
+    const change = member(entry, name);
+    return change?.[former] === undefined || change[former] !== change[current];
+  });
+}
+
 function check(text: string): { link?: Link; seq: number } {
   let value: Json;
   try {
@@ -55,16 +87,7 @@ function check(text: string): { link?: Link; seq: number } {
   }
   const seq = isObject(value) ? readableSeq(value.seq) : 0;
   if (!isObject(value) || !auditSchema(value)) return { seq };
-  const displayed = [
-    isObject(value.actor) ? value.actor.id : undefined,
-    isObject(value.agent) ? value.agent.display_name : undefined,
-    isObject(value.approval) ? value.approval.by : undefined,
-  ];
-  if (displayed.some((text) => typeof text === "string" && !displayable(text))) return { seq };
-  // A former identifier differs from the current one (SPEC-v0 section 9.1); JSON Schema
-  // cannot compare two members.
-  const directory = isObject(value.directory) ? value.directory : undefined;
-  if (directory?.previous_entity_id !== undefined && directory.previous_entity_id === directory.entity_id) return { seq };
+  if (!displayedTextValid(value) || !formerValuesDistinct(value)) return { seq };
   let entryDigest: string;
   try {
     entryDigest = digest(value);
