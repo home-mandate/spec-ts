@@ -1,7 +1,7 @@
 {
   "name": "@home-mandate/spec",
-  "version": "0.1.0-alpha.1",
-  "homeMandateSpec": "v0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
+  "homeMandateSpec": "v0.1.0-alpha.2",
   "description": "Independent TypeScript implementation of the Home-Mandate Specification v0: validation, digest, evaluation, selection, audit log verification, signatures.",
   "license": "Apache-2.0",
   "private": true,
