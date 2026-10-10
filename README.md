@@ -87,6 +87,7 @@ release names it:
 | v0.1.0-alpha.1 | v0.1.0-alpha.1 |
 | v0.1.0-alpha.2 | v0.1.0-alpha.2 |
 | v0.1.0-alpha.3 | v0.1.0-alpha.3 |
+| v0.1.0-alpha.4 | v0.1.0-alpha.4 |
 
 Version numbers restarted with the rename from mandate-spec. Earlier releases as mandate-spec-ts
 (v0.1.0-alpha.1 to v0.1.0-alpha.4, implementing mandate-spec v0.2.0-alpha.2 to v0.2.0-alpha.5)
