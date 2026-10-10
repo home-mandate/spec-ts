@@ -87,3 +87,55 @@ test("an agent display name in a reconnection is displayed text", () => {
   const name = "Voice‮assistant";
   assert.equal(verifyAudit([entry("agent.reconnected", { agent: { ...AGENT, display_name: name } })]).valid, false);
 });
+
+// Approval requests that end without an answer (SPEC-v0 sections 9.1 and 11.1 item 8).
+function decision(approval: Record<string, Json>, result: Record<string, Json> | null): string {
+  const parsed = JSON.parse(entry("decision", {})) as Record<string, Json>;
+  delete parsed.actor;
+  return JSON.stringify({
+    ...parsed,
+    agent: { client_id: AGENT.client_id },
+    request: { time: "2026-10-01T09:00:00+02:00", resource: { entity_id: "lock.front_door", category: "lock" }, action: "unlock" },
+    mandate: MANDATE,
+    evaluation: { decision: "ask", reason: "rule", rule_id: "r-locks", approval_timeout: "PT2M" },
+    approval: { at: "2026-10-01T09:00:30+02:00", ...approval },
+    ...(result ? { result } : {}),
+  });
+}
+
+const CAUSES = [
+  ["withdrawn", "approval"],
+  ["interrupted", "approval"],
+  ["revoked", "authentication"],
+  ["revoked", "mandate"],
+  ["emergency_stop", "emergency_stop"],
+] as const;
+
+test("a cancelled request is a denial matching its cause", () => {
+  for (const [cause, by] of CAUSES) {
+    assert.equal(verifyAudit([decision({ outcome: "cancelled", cause }, { status: "denied", denied_by: by })]).valid, true, `${cause}/${by}`);
+  }
+  for (const by of ["approval", "authentication", "mandate", "emergency_stop"]) {
+    for (const cause of ["withdrawn", "interrupted", "revoked", "emergency_stop"]) {
+      if (CAUSES.some(([c, b]) => c === cause && b === by)) continue;
+      assert.equal(verifyAudit([decision({ outcome: "cancelled", cause }, { status: "denied", denied_by: by })]).valid, false, `${cause}/${by}`);
+    }
+  }
+});
+
+test("a cancelled request has a cause, nobody who answered and no execution", () => {
+  const denied = { status: "denied", denied_by: "approval" };
+  assert.equal(verifyAudit([decision({ outcome: "cancelled" }, denied)]).valid, false, "no cause");
+  assert.equal(verifyAudit([decision({ outcome: "cancelled", cause: "restarted" }, denied)]).valid, false, "unknown cause");
+  assert.equal(verifyAudit([decision({ outcome: "cancelled", cause: "withdrawn", by: "user-1" }, denied)]).valid, false, "by");
+  assert.equal(verifyAudit([decision({ outcome: "cancelled", cause: "withdrawn", via: "push" }, denied)]).valid, false, "via");
+  assert.equal(verifyAudit([decision({ outcome: "cancelled", cause: "withdrawn" }, null)]).valid, false, "no result");
+  assert.equal(verifyAudit([decision({ outcome: "cancelled", cause: "interrupted" }, { status: "failed", error: "outcome_unknown" })]).valid, false, "failed");
+  assert.equal(verifyAudit([decision({ outcome: "timeout", cause: "interrupted" }, denied)]).valid, false, "cause without cancelled");
+});
+
+test("a confirmed action that was not executed is a failure with its code", () => {
+  for (const error of ["outcome_unknown", "already_in_state", "state_changed"]) {
+    assert.equal(verifyAudit([decision({ outcome: "approved", by: "user-1", via: "push" }, { status: "failed", error })]).valid, true, error);
+  }
+});
