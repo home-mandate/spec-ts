@@ -79,8 +79,9 @@ mandate-conformance -classes evaluator,selection,signatures,audit,audit-anchored
 This implementation has version numbers of its own (semantic versioning, `package.json`
 `version`, tags `v0.1.0-alpha.1`, …), independent of the tags of the specification: a fix here
 needs no new specification, and a clarification of the specification no new release here.
-Which version of the specification it implements is `homeMandateSpec` in `package.json`, and every
-release names it:
+Only the major version follows the format major of the specification (SPEC-v0 section 14):
+format v0 → 0.x, format v1 → 1.x. Which exact specification tag it implements is
+`homeMandateSpec` in `package.json`, and every release names it:
 
 | This implementation | implements the Home-Mandate Specification |
 |---|---|
@@ -88,6 +89,11 @@ release names it:
 | v0.1.0-alpha.2 | v0.1.0-alpha.2 |
 | v0.1.0-alpha.3 | v0.1.0-alpha.3 |
 | v0.1.0-alpha.4 | v0.1.0-alpha.4 |
+
+From the specification's `v0.1.0` on, the v0 formats (mandate, audit entry, audit checkpoint)
+are frozen; an incompatible change then comes with a new format major. Reading v0 data as part
+of v1 (older audit entries in the same log, mandates moved to v1 by succession) is only added
+here once a v1 format exists.
 
 Version numbers restarted with the rename from mandate-spec. Earlier releases as mandate-spec-ts
 (v0.1.0-alpha.1 to v0.1.0-alpha.4, implementing mandate-spec v0.2.0-alpha.2 to v0.2.0-alpha.5)
