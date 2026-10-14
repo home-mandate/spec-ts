@@ -73,6 +73,8 @@ mandate-conformance -classes evaluator,selection,signatures,audit,audit-anchored
 ```
 
 `src/harness.ts` implements the process binding of the test interface (SPEC-v0 section 10.2).
+Every release carries the report of that run as `conformance-report.json`, with build provenance
+(`gh attestation verify conformance-report.json --repo home-mandate/spec-ts`).
 
 ## Versions
 
