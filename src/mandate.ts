@@ -55,6 +55,8 @@ export interface Mandate {
   issuer: string;
   /** 0 if the mandate has no version. */
   version: number;
+  /** false for a mandate in audit mode ("enforce": false, SPEC-v0 section 4.6). */
+  enforce: boolean;
   validFrom: Instant;
   expires: Instant | null;
   rules: Rule[];
@@ -197,6 +199,7 @@ export function parseMandate(text: string): Mandate {
     principal: value.principal as string,
     issuer: (value.issuer as string | undefined) ?? "",
     version: (value.version as number | undefined) ?? 0,
+    enforce: value.enforce !== false,
     validFrom, expires, rules,
     approval: approval(value.approval!, "approval"),
   };

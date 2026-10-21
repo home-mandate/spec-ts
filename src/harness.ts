@@ -75,6 +75,7 @@ function outcome(r: Result): object {
   if (r.rule_id !== undefined) out.rule_id = r.rule_id;
   if (r.approval) Object.assign(out, { approval_timeout: r.approval.timeout, approvers: r.approval.approvers });
   if (r.mandate_digest !== undefined) out.mandate_digest = r.mandate_digest;
+  if (r.enforced === false) out.enforced = false;
   return out;
 }
 

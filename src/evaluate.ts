@@ -41,6 +41,12 @@ export interface Result {
   rule_id?: string;
   approval?: Approval;
   mandate_digest?: string;
+  /**
+   * false only for a deny that the PEP does not enforce: the mandate is in audit mode, the
+   * deny results from its rules (no_match or a deny rule) and the action is not critical
+   * (SPEC-v0 section 4.6). The decision stays deny. Absent: the result is enforced.
+   */
+  enforced?: false;
 }
 
 /** Whether the areas are a set of at most 16 area identifiers without duplicates. */
@@ -114,7 +120,14 @@ export function evaluate(mandate: Mandate | null, req: Request): Result {
   if (at.ns < mandate.validFrom.ns) return deny("not_yet_valid", mandate);
   if (mandate.expires && at.ns >= mandate.expires.ns) return deny("expired", mandate);
 
-  const matched = mandate.rules.filter((r) => matches(r, req, local));
+  const result = decide(mandate, mandate.rules.filter((r) => matches(r, req, local)), req);
+  // Audit mode (section 4.6): only a deny by the rules, never one of a critical action.
+  const notEnforced = !mandate.enforce && result.decision === "deny" && !isCritical(req.resource, req.action);
+  return notEnforced ? { ...result, enforced: false } : result;
+}
+
+/** Steps 3 to 5 of the evaluation rule: the decision of the matching rules. */
+function decide(mandate: Mandate, matched: Rule[], req: Request): Result {
   if (matched.length === 0) return deny("no_match", mandate);
   const final = matched.reduce<Decision>((d, r) => (STRICTNESS[r.decision] > STRICTNESS[d] ? r.decision : d), "allow");
   const first = matched.find((r) => r.decision === final)!;

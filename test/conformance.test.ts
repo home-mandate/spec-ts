@@ -80,21 +80,28 @@ test("harness refuses members the test interface does not define", () => {
   );
 });
 
-test("harness reads parameters by their exact value", () => {
+test("harness reads parameters by their exact value and reports a deny that is not enforced", () => {
   const mandate = specFile("conformance/mandates/one-of.json");
   const line = (brightness: string) =>
     `{"op":"evaluate","mandate":${JSON.stringify(mandate)},"request":{"resource":{"entity_id":"light.desk","category":"light"},"action":"set","parameters":{"brightness":${brightness}},"time":"2026-10-12T12:00:00+02:00"}}`;
   assert.equal((answer(readMessage(line("50.00000000000000000001"))) as Case).reason, "invalid_request");
   assert.notEqual((answer(readMessage(line("5e1"))) as Case).reason, "invalid_request");
+  const audit = specFile("conformance/mandates/audit-mode.json");
+  const denied = answer({
+    op: "evaluate", mandate: audit,
+    request: { resource: { entity_id: "switch.unknown", category: "switch" }, action: "turn_on", time: "2026-10-12T12:00:00+02:00" },
+  }) as Case;
+  assert.equal(denied.decision, "deny");
+  assert.equal(denied.enforced, false);
 });
 
-test("cases for sets of areas and parameters are part of the files", () => {
+test("cases for sets of areas, parameters and audit mode are part of the files", () => {
   const ids = (path: string, key = "cases") => new Set(cases(path, key).map((c) => c.id as string));
   const expect = (set: Set<string>, prefix: string, from: number, to: number) => {
     for (let n = from; n <= to; n++) assert.ok(set.has(`${prefix}${n}`), `${prefix}${n} is missing`);
   };
-  expect(ids("conformance/cases-v0.json"), "c", 140, 173);
-  expect(ids("conformance/invalid-v0.json"), "i", 129, 143);
-  expect(ids("conformance/digest-v0.json"), "d", 41, 42);
-  expect(ids("conformance/audit-v0.json", "logs"), "a", 106, 110);
+  expect(ids("conformance/cases-v0.json"), "c", 140, 192);
+  expect(ids("conformance/invalid-v0.json"), "i", 129, 148);
+  expect(ids("conformance/digest-v0.json"), "d", 41, 44);
+  expect(ids("conformance/audit-v0.json", "logs"), "a", 106, 125);
 });

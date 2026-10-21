@@ -52,6 +52,7 @@ function assertOutcome(c: Case, result: Browser.Result): void {
   if ("rule_id" in c) assert.equal(result.rule_id ?? null, c.rule_id);
   if (c.approval_timeout) assert.equal(result.approval?.timeout, c.approval_timeout);
   assert.equal(result.approval !== undefined, result.decision === "ask");
+  assert.equal(result.enforced, c.enforced === false ? false : undefined, `${c.id}: ${c.why}`);
 }
 
 /** Registers the tests of the evaluator and selection cases against the library. */

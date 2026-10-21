@@ -36,6 +36,9 @@ determined by the caller from its own directory, clock and configuration, never 
 agent (SPEC-v0 section 4). Parameters are integers in the units of the vocabulary or strings
 (`{ mode: "heat" }`); whoever reads them from JSON text reads numbers with `exactNumber`, so
 that a fraction such as `50.00000000000000000001` is never taken for an integer (section 4.5).
+For a mandate in audit mode (`"enforce": false`), a `deny` by its rules for an action that is
+not critical carries `enforced: false`: the caller executes the request and records it
+(section 4.6).
 
 ### In a web browser
 
