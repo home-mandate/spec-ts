@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import { exactNumber } from "./number.ts";
+
 // A strict JSON parser for I-JSON (RFC 7493): exactly one value, no duplicate keys, no
-// lone surrogates. JSON.parse silently keeps the last of two equal keys, so it cannot
-// be used for mandates and audit entries.
+// lone surrogates, and no number with more precision than floating point keeps (a fraction
+// it would round to an integer). JSON.parse silently keeps the last of two equal keys, so
+// it cannot be used for mandates and audit entries.
 
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 
@@ -125,7 +128,8 @@ class Parser {
     const m = /^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?/.exec(this.text.slice(this.pos, this.pos + 400));
     if (!m) throw new JsonError("unexpected token");
     this.pos += m[0].length;
-    const n = Number(m[0]);
+    const n = exactNumber(m[0]);
+    if (Number.isNaN(n)) throw new JsonError("a fraction that floating point would round to an integer");
     if (!Number.isFinite(n)) throw new JsonError("number out of range");
     return n;
   }
