@@ -92,6 +92,7 @@ format v0 → 0.x, format v1 → 1.x. Which exact specification tag it implement
 | v0.1.0-alpha.3 | v0.1.0-alpha.3 |
 | v0.1.0-alpha.4 | v0.1.0-alpha.4 |
 | v0.1.0-rc.1 | v0.1.0-rc.1 |
+| v0.1.0-rc.3 | v0.1.0-rc.3 |
 
 From the specification's `v0.1.0` on, the v0 formats (mandate, audit entry, audit checkpoint)
 are frozen; an incompatible change then comes with a new format major. Reading v0 data as part

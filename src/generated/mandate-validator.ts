@@ -3,10 +3,10 @@
 // @ts-nocheck
 import { equal, formats, ucs2length } from "../schema-runtime.ts";
 export const validateMandate = validate20;
-const schema31 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://home-mandate.org/mandate/v0/mandate.schema.json","title":"Mandate v0","description":"Describes what a software agent may do on behalf of a household. Working draft.","type":"object","additionalProperties":false,"required":["type","id","principal","agent","rules","default","approval","limits","valid_from","created_by","created_at"],"dependentRequired":{"issuer":["version"],"version":["issuer"]},"properties":{"type":{"const":"https://home-mandate.org/mandate/v0"},"id":{"type":"string","pattern":"^[A-Za-z0-9_-]{4,64}$"},"principal":{"type":"string","pattern":"^(household|person):[A-Za-z0-9_-]{1,64}$"},"agent":{"type":"object","additionalProperties":false,"required":["client_id","display_name"],"properties":{"client_id":{"description":"Identifier of the agent, compared exactly per character (SPEC-v0 section 3.3).","$ref":"#/$defs/uri"},"display_name":{"type":"string","minLength":1,"maxLength":80}}},"rules":{"type":"array","maxItems":200,"items":{"$ref":"#/$defs/rule"}},"default":{"description":"Always deny in v0. Anything no rule matches is forbidden.","const":"deny"},"approval":{"$ref":"#/$defs/approval"},"limits":{"type":"object","additionalProperties":false,"required":["max_actions_per_hour"],"properties":{"max_actions_per_hour":{"type":"integer","minimum":1,"maximum":1000}}},"valid_from":{"$ref":"#/$defs/date_time"},"expires":{"$ref":"#/$defs/date_time"},"issuer":{"description":"Who issued the mandate; only together with version. Required in a signed mandate (SPEC-v0 sections 3.5 and 7).","$ref":"#/$defs/uri"},"version":{"description":"Version of the mandate with this id, increasing with every change; only together with issuer.","type":"integer","minimum":1,"maximum":9007199254740991},"created_by":{"type":"string","minLength":1,"maxLength":128},"created_at":{"$ref":"#/$defs/date_time"}},"$defs":{"uri":{"description":"Either an https URL (lower-case host, a path, no userinfo, no fragment) or another URI such as <namespace>:<id>, did:web:..., spiffe://... or urn:.... Printable ASCII only, no dot segments.","type":"string","maxLength":512,"allOf":[{"if":{"pattern":"^https:[!-~]*$"},"then":{"pattern":"^https://[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:[0-9]{1,5})?/[A-Za-z0-9._~%!$&'()*+,;=:/?-]*$"},"else":{"pattern":"^[a-z][a-z0-9+.-]{0,31}:[A-Za-z0-9._~:/-]{1,256}$","not":{"pattern":"^http:[!-~]*$"}}},{"not":{"pattern":"^[!-~]*/[.][.]?([/?][!-~]*)?$"}}]},"date_time":{"description":"Timestamp according to RFC 3339 with offset, at most 9 fractional digits, not in year 0000 and not with the offset -00:00. Asserting format is required (SPEC-v0 section 3.1 item 0); pattern also catches gross errors in validators that treat format only as an annotation.","type":"string","format":"date-time","pattern":"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$","not":{"anyOf":[{"pattern":"^0000[!-~]*$"},{"pattern":"^[!-~]*-00:00$"}]}},"category":{"anyOf":[{"enum":["light","switch","climate","cover","gate","lock","alarm","camera","media","sensor","scene","script","other"]},{"type":"string","pattern":"^[a-z][a-z0-9_-]*:[a-z][a-z0-9_]*$","description":"Namespaced extension, e.g. paperless:document"}]},"resource":{"type":"object","additionalProperties":false,"minProperties":1,"properties":{"entity_id":{"description":"Identifier of the resource in the directory of the implementation. Opaque: printable ASCII without space, compared exactly per character.","type":"string","pattern":"^[!-~]{1,255}$"},"category":{"$ref":"#/$defs/category"},"area":{"description":"Identifier of the area or group the resource belongs to. Opaque, compared exactly per character.","type":"string","pattern":"^[!-~]{1,64}$"},"any":{"const":true,"description":"Matches every resource. Only allowed on its own."}},"if":{"required":["any"]},"then":{"maxProperties":1}},"approval":{"type":"object","additionalProperties":false,"required":["timeout","approvers"],"properties":{"timeout":{"type":"string","minLength":4,"pattern":"^PT([0-9]{1,5}H)?([0-9]{1,5}M)?([0-9]{1,5}S)?$"},"approvers":{"description":"Identifiers, in the implementation's user management, of the people allowed to confirm approval requests.","type":"array","minItems":1,"uniqueItems":true,"items":{"type":"string","minLength":1,"maxLength":64}}}},"conditions":{"type":"object","additionalProperties":false,"minProperties":1,"properties":{"time_window":{"type":"string","pattern":"^([01][0-9]|2[0-3]):[0-5][0-9]-([01][0-9]|2[0-3]):[0-5][0-9]$"},"weekdays":{"type":"array","minItems":1,"uniqueItems":true,"items":{"enum":["mon","tue","wed","thu","fri","sat","sun"]}}}},"limit":{"description":"An integer in the unit the vocabulary gives the parameter. Mandates contain no fractions, so that the canonical form needs no floating-point serialization.","type":"integer","minimum":-9007199254740991,"maximum":9007199254740991},"constraints":{"description":"Only with allow: limits for integer parameters of the action. The rule matches only if the request carries every named parameter with a value within the limits (SPEC-v0 section 4.5).","type":"object","minProperties":1,"maxProperties":16,"propertyNames":{"pattern":"^[a-z][a-z0-9_]{0,63}$"},"additionalProperties":{"type":"object","additionalProperties":false,"minProperties":1,"properties":{"min":{"$ref":"#/$defs/limit","description":"Smallest permitted value, inclusive."},"max":{"$ref":"#/$defs/limit","description":"Largest permitted value, inclusive."}}}},"rule":{"type":"object","additionalProperties":false,"required":["id","resource","actions","decision"],"properties":{"id":{"type":"string","pattern":"^[A-Za-z0-9_-]{1,64}$"},"resource":{"$ref":"#/$defs/resource"},"actions":{"description":"Actions from the vocabulary or \"*\". The implementation checks whether an action fits the category (SPEC-v0 section 3.1 item 4).","type":"array","minItems":1,"uniqueItems":true,"items":{"type":"string","pattern":"^(\\*|[a-z][a-z0-9_]{0,63})$"}},"decision":{"enum":["allow","ask","deny"]},"conditions":{"$ref":"#/$defs/conditions"},"constraints":{"$ref":"#/$defs/constraints"},"approval":{"$ref":"#/$defs/approval"},"allow_critical":{"description":"Only with allow and only with the actions listed, not with \"*\": permits critical actions without an approval request. Must be confirmed separately in the user interface.","const":true}},"allOf":[{"if":{"required":["approval"]},"then":{"properties":{"decision":{"const":"ask"}}}},{"if":{"required":["allow_critical"]},"then":{"properties":{"decision":{"const":"allow"}}}},{"if":{"required":["allow_critical"]},"then":{"properties":{"actions":{"not":{"contains":{"const":"*"}}}}}},{"if":{"required":["constraints"]},"then":{"properties":{"decision":{"const":"allow"},"actions":{"not":{"contains":{"const":"*"}}}}}}]}}};
+const schema31 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://home-mandate.org/mandate/v0/mandate.schema.json","title":"Mandate v0","description":"Describes what a software agent may do on behalf of a household. Working draft.","type":"object","additionalProperties":false,"required":["type","id","principal","agent","rules","default","approval","limits","valid_from","created_by","created_at"],"dependentRequired":{"issuer":["version"],"version":["issuer"]},"properties":{"type":{"const":"https://home-mandate.org/mandate/v0"},"id":{"type":"string","pattern":"^[A-Za-z0-9_-]{4,64}$"},"principal":{"type":"string","pattern":"^(household|person):[A-Za-z0-9_-]{1,64}$"},"agent":{"type":"object","additionalProperties":false,"required":["client_id","display_name"],"properties":{"client_id":{"description":"Identifier of the agent, compared exactly per character (SPEC-v0 section 3.3).","$ref":"#/$defs/uri"},"display_name":{"type":"string","minLength":1,"maxLength":80}}},"enforce":{"description":"Only false: audit mode (SPEC-v0 section 4.6). A deny that results from the rules of the valid, active mandate is evaluated and logged, but not enforced, unless the action is critical. Absent: every decision is enforced. true is not permitted, so that a mandate that enforces has one form.","const":false},"rules":{"type":"array","maxItems":200,"items":{"$ref":"#/$defs/rule"}},"default":{"description":"Always deny in v0. Anything no rule matches is forbidden.","const":"deny"},"approval":{"$ref":"#/$defs/approval"},"limits":{"type":"object","additionalProperties":false,"required":["max_actions_per_hour"],"properties":{"max_actions_per_hour":{"type":"integer","minimum":1,"maximum":1000}}},"valid_from":{"$ref":"#/$defs/date_time"},"expires":{"$ref":"#/$defs/date_time"},"issuer":{"description":"Who issued the mandate; only together with version. Required in a signed mandate (SPEC-v0 sections 3.5 and 7).","$ref":"#/$defs/uri"},"version":{"description":"Version of the mandate with this id, increasing with every change; only together with issuer.","type":"integer","minimum":1,"maximum":9007199254740991},"created_by":{"type":"string","minLength":1,"maxLength":128},"created_at":{"$ref":"#/$defs/date_time"}},"$defs":{"uri":{"description":"Either an https URL (lower-case host, a path, no userinfo, no fragment) or another URI such as <namespace>:<id>, did:web:..., spiffe://... or urn:.... Printable ASCII only, no dot segments.","type":"string","maxLength":512,"allOf":[{"if":{"pattern":"^https:[!-~]*$"},"then":{"pattern":"^https://[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:[0-9]{1,5})?/[A-Za-z0-9._~%!$&'()*+,;=:/?-]*$"},"else":{"pattern":"^[a-z][a-z0-9+.-]{0,31}:[A-Za-z0-9._~:/-]{1,256}$","not":{"pattern":"^http:[!-~]*$"}}},{"not":{"pattern":"^[!-~]*/[.][.]?([/?][!-~]*)?$"}}]},"date_time":{"description":"Timestamp according to RFC 3339 with offset, at most 9 fractional digits, not in year 0000 and not with the offset -00:00. Asserting format is required (SPEC-v0 section 3.1 item 0); pattern also catches gross errors in validators that treat format only as an annotation.","type":"string","format":"date-time","pattern":"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$","not":{"anyOf":[{"pattern":"^0000[!-~]*$"},{"pattern":"^[!-~]*-00:00$"}]}},"category":{"anyOf":[{"enum":["light","switch","climate","cover","gate","lock","alarm","camera","media","sensor","scene","script","other"]},{"type":"string","pattern":"^[a-z][a-z0-9_-]*:[a-z][a-z0-9_]*$","description":"Namespaced extension, e.g. paperless:document"}]},"resource":{"type":"object","additionalProperties":false,"minProperties":1,"properties":{"entity_id":{"description":"Identifier of the resource in the directory of the implementation. Opaque: printable ASCII without space, compared exactly per character.","type":"string","pattern":"^[!-~]{1,255}$"},"category":{"$ref":"#/$defs/category"},"area":{"description":"Identifier of the area or group the resource belongs to. Opaque, compared exactly per character.","type":"string","pattern":"^[!-~]{1,64}$"},"any":{"const":true,"description":"Matches every resource. Only allowed on its own."}},"if":{"required":["any"]},"then":{"maxProperties":1}},"approval":{"type":"object","additionalProperties":false,"required":["timeout","approvers"],"properties":{"timeout":{"type":"string","minLength":4,"pattern":"^PT([0-9]{1,5}H)?([0-9]{1,5}M)?([0-9]{1,5}S)?$"},"approvers":{"description":"Identifiers, in the implementation's user management, of the people allowed to confirm approval requests.","type":"array","minItems":1,"uniqueItems":true,"items":{"type":"string","minLength":1,"maxLength":64}}}},"conditions":{"type":"object","additionalProperties":false,"minProperties":1,"properties":{"time_window":{"type":"string","pattern":"^([01][0-9]|2[0-3]):[0-5][0-9]-([01][0-9]|2[0-3]):[0-5][0-9]$"},"weekdays":{"type":"array","minItems":1,"uniqueItems":true,"items":{"enum":["mon","tue","wed","thu","fri","sat","sun"]}}}},"limit":{"description":"An integer in the unit the vocabulary gives the parameter, as a limit or a permitted value. Mandates contain no fractions, so that the canonical form needs no floating-point serialization.","type":"integer","minimum":-9007199254740991,"maximum":9007199254740991},"text":{"description":"A string parameter value: 1 to 64 printable ASCII characters without space, compared exactly and case-sensitive, like an area (SPEC-v0 sections 3.4 and 4.5).","type":"string","pattern":"^[!-~]{1,64}$"},"constraints":{"description":"Only with allow: constraints on parameters of the action. The rule matches only if the request carries every named parameter with a value the constraint permits (SPEC-v0 section 4.5).","type":"object","minProperties":1,"maxProperties":16,"propertyNames":{"pattern":"^[a-z][a-z0-9_]{0,63}$"},"additionalProperties":{"oneOf":[{"description":"Limits for an integer parameter.","type":"object","additionalProperties":false,"minProperties":1,"properties":{"min":{"$ref":"#/$defs/limit","description":"Smallest permitted value, inclusive."},"max":{"$ref":"#/$defs/limit","description":"Largest permitted value, inclusive."}}},{"description":"The permitted values of an integer or string parameter, all of the same type; not together with min or max.","type":"object","additionalProperties":false,"required":["one_of"],"properties":{"one_of":{"type":"array","minItems":1,"maxItems":32,"uniqueItems":true,"anyOf":[{"items":{"$ref":"#/$defs/limit"}},{"items":{"$ref":"#/$defs/text"}}]}}}]}},"rule":{"type":"object","additionalProperties":false,"required":["id","resource","actions","decision"],"properties":{"id":{"type":"string","pattern":"^[A-Za-z0-9_-]{1,64}$"},"resource":{"$ref":"#/$defs/resource"},"actions":{"description":"Actions from the vocabulary or \"*\". The implementation checks whether an action fits the category (SPEC-v0 section 3.1 item 4).","type":"array","minItems":1,"uniqueItems":true,"items":{"type":"string","pattern":"^(\\*|[a-z][a-z0-9_]{0,63})$"}},"decision":{"enum":["allow","ask","deny"]},"conditions":{"$ref":"#/$defs/conditions"},"constraints":{"$ref":"#/$defs/constraints"},"approval":{"$ref":"#/$defs/approval"},"allow_critical":{"description":"Only with allow and only with the actions listed, not with \"*\": permits critical actions without an approval request. Must be confirmed separately in the user interface.","const":true}},"allOf":[{"if":{"required":["approval"]},"then":{"properties":{"decision":{"const":"ask"}}}},{"if":{"required":["allow_critical"]},"then":{"properties":{"decision":{"const":"allow"}}}},{"if":{"required":["allow_critical"]},"then":{"properties":{"actions":{"not":{"contains":{"const":"*"}}}}}},{"if":{"required":["constraints"]},"then":{"properties":{"decision":{"const":"allow"},"actions":{"not":{"contains":{"const":"*"}}}}}}]}}};
 const schema32 = {"description":"Either an https URL (lower-case host, a path, no userinfo, no fragment) or another URI such as <namespace>:<id>, did:web:..., spiffe://... or urn:.... Printable ASCII only, no dot segments.","type":"string","maxLength":512,"allOf":[{"if":{"pattern":"^https:[!-~]*$"},"then":{"pattern":"^https://[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:[0-9]{1,5})?/[A-Za-z0-9._~%!$&'()*+,;=:/?-]*$"},"else":{"pattern":"^[a-z][a-z0-9+.-]{0,31}:[A-Za-z0-9._~:/-]{1,256}$","not":{"pattern":"^http:[!-~]*$"}}},{"not":{"pattern":"^[!-~]*/[.][.]?([/?][!-~]*)?$"}}]};
-const schema40 = {"type":"object","additionalProperties":false,"required":["timeout","approvers"],"properties":{"timeout":{"type":"string","minLength":4,"pattern":"^PT([0-9]{1,5}H)?([0-9]{1,5}M)?([0-9]{1,5}S)?$"},"approvers":{"description":"Identifiers, in the implementation's user management, of the people allowed to confirm approval requests.","type":"array","minItems":1,"uniqueItems":true,"items":{"type":"string","minLength":1,"maxLength":64}}}};
-const schema42 = {"description":"Timestamp according to RFC 3339 with offset, at most 9 fractional digits, not in year 0000 and not with the offset -00:00. Asserting format is required (SPEC-v0 section 3.1 item 0); pattern also catches gross errors in validators that treat format only as an annotation.","type":"string","format":"date-time","pattern":"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$","not":{"anyOf":[{"pattern":"^0000[!-~]*$"},{"pattern":"^[!-~]*-00:00$"}]}};
+const schema42 = {"type":"object","additionalProperties":false,"required":["timeout","approvers"],"properties":{"timeout":{"type":"string","minLength":4,"pattern":"^PT([0-9]{1,5}H)?([0-9]{1,5}M)?([0-9]{1,5}S)?$"},"approvers":{"description":"Identifiers, in the implementation's user management, of the people allowed to confirm approval requests.","type":"array","minItems":1,"uniqueItems":true,"items":{"type":"string","minLength":1,"maxLength":64}}}};
+const schema44 = {"description":"Timestamp according to RFC 3339 with offset, at most 9 fractional digits, not in year 0000 and not with the offset -00:00. Asserting format is required (SPEC-v0 section 3.1 item 0); pattern also catches gross errors in validators that treat format only as an annotation.","type":"string","format":"date-time","pattern":"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$","not":{"anyOf":[{"pattern":"^0000[!-~]*$"},{"pattern":"^[!-~]*-00:00$"}]}};
 const func1 = Object.prototype.hasOwnProperty;
 const func2 = ucs2length;
 const pattern4 = new RegExp("^[A-Za-z0-9_-]{4,64}$", "u");
@@ -16,10 +16,10 @@ const pattern7 = new RegExp("^https://[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:[0-9]{1,5}
 const pattern8 = new RegExp("^http:[!-~]*$", "u");
 const pattern9 = new RegExp("^[a-z][a-z0-9+.-]{0,31}:[A-Za-z0-9._~:/-]{1,256}$", "u");
 const pattern10 = new RegExp("^[!-~]*/[.][.]?([/?][!-~]*)?$", "u");
-const pattern18 = new RegExp("^PT([0-9]{1,5}H)?([0-9]{1,5}M)?([0-9]{1,5}S)?$", "u");
-const pattern20 = new RegExp("^0000[!-~]*$", "u");
-const pattern21 = new RegExp("^[!-~]*-00:00$", "u");
-const pattern22 = new RegExp("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$", "u");
+const pattern19 = new RegExp("^PT([0-9]{1,5}H)?([0-9]{1,5}M)?([0-9]{1,5}S)?$", "u");
+const pattern21 = new RegExp("^0000[!-~]*$", "u");
+const pattern22 = new RegExp("^[!-~]*-00:00$", "u");
+const pattern23 = new RegExp("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$", "u");
 const schema33 = {"type":"object","additionalProperties":false,"required":["id","resource","actions","decision"],"properties":{"id":{"type":"string","pattern":"^[A-Za-z0-9_-]{1,64}$"},"resource":{"$ref":"#/$defs/resource"},"actions":{"description":"Actions from the vocabulary or \"*\". The implementation checks whether an action fits the category (SPEC-v0 section 3.1 item 4).","type":"array","minItems":1,"uniqueItems":true,"items":{"type":"string","pattern":"^(\\*|[a-z][a-z0-9_]{0,63})$"}},"decision":{"enum":["allow","ask","deny"]},"conditions":{"$ref":"#/$defs/conditions"},"constraints":{"$ref":"#/$defs/constraints"},"approval":{"$ref":"#/$defs/approval"},"allow_critical":{"description":"Only with allow and only with the actions listed, not with \"*\": permits critical actions without an approval request. Must be confirmed separately in the user interface.","const":true}},"allOf":[{"if":{"required":["approval"]},"then":{"properties":{"decision":{"const":"ask"}}}},{"if":{"required":["allow_critical"]},"then":{"properties":{"decision":{"const":"allow"}}}},{"if":{"required":["allow_critical"]},"then":{"properties":{"actions":{"not":{"contains":{"const":"*"}}}}}},{"if":{"required":["constraints"]},"then":{"properties":{"decision":{"const":"allow"},"actions":{"not":{"contains":{"const":"*"}}}}}}]};
 const schema36 = {"type":"object","additionalProperties":false,"minProperties":1,"properties":{"time_window":{"type":"string","pattern":"^([01][0-9]|2[0-3]):[0-5][0-9]-([01][0-9]|2[0-3]):[0-5][0-9]$"},"weekdays":{"type":"array","minItems":1,"uniqueItems":true,"items":{"enum":["mon","tue","wed","thu","fri","sat","sun"]}}}};
 const pattern11 = new RegExp("^[A-Za-z0-9_-]{1,64}$", "u");
@@ -249,9 +249,11 @@ return errors === 0;
 }
 validate22.evaluated = {"props":true,"dynamicProps":false,"dynamicItems":false};
 
-const schema37 = {"description":"Only with allow: limits for integer parameters of the action. The rule matches only if the request carries every named parameter with a value within the limits (SPEC-v0 section 4.5).","type":"object","minProperties":1,"maxProperties":16,"propertyNames":{"pattern":"^[a-z][a-z0-9_]{0,63}$"},"additionalProperties":{"type":"object","additionalProperties":false,"minProperties":1,"properties":{"min":{"$ref":"#/$defs/limit","description":"Smallest permitted value, inclusive."},"max":{"$ref":"#/$defs/limit","description":"Largest permitted value, inclusive."}}}};
-const schema38 = {"description":"An integer in the unit the vocabulary gives the parameter. Mandates contain no fractions, so that the canonical form needs no floating-point serialization.","type":"integer","minimum":-9007199254740991,"maximum":9007199254740991};
+const schema37 = {"description":"Only with allow: constraints on parameters of the action. The rule matches only if the request carries every named parameter with a value the constraint permits (SPEC-v0 section 4.5).","type":"object","minProperties":1,"maxProperties":16,"propertyNames":{"pattern":"^[a-z][a-z0-9_]{0,63}$"},"additionalProperties":{"oneOf":[{"description":"Limits for an integer parameter.","type":"object","additionalProperties":false,"minProperties":1,"properties":{"min":{"$ref":"#/$defs/limit","description":"Smallest permitted value, inclusive."},"max":{"$ref":"#/$defs/limit","description":"Largest permitted value, inclusive."}}},{"description":"The permitted values of an integer or string parameter, all of the same type; not together with min or max.","type":"object","additionalProperties":false,"required":["one_of"],"properties":{"one_of":{"type":"array","minItems":1,"maxItems":32,"uniqueItems":true,"anyOf":[{"items":{"$ref":"#/$defs/limit"}},{"items":{"$ref":"#/$defs/text"}}]}}}]}};
+const schema38 = {"description":"An integer in the unit the vocabulary gives the parameter, as a limit or a permitted value. Mandates contain no fractions, so that the canonical form needs no floating-point serialization.","type":"integer","minimum":-9007199254740991,"maximum":9007199254740991};
+const schema41 = {"description":"A string parameter value: 1 to 64 printable ASCII characters without space, compared exactly and case-sensitive, like an area (SPEC-v0 sections 3.4 and 4.5).","type":"string","pattern":"^[!-~]{1,64}$"};
 const pattern17 = new RegExp("^[a-z][a-z0-9_]{0,63}$", "u");
+const func0 = equal;
 
 function validate24(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 let vErrors = null;
@@ -308,84 +310,414 @@ if(valid0){
 for(const key1 in data){
 let data0 = data[key1];
 const _errs3 = errors;
-if(errors === _errs3){
+const _errs4 = errors;
+let valid2 = false;
+let passing0 = null;
+const _errs5 = errors;
+if(errors === _errs5){
 if(data0 && typeof data0 == "object" && !Array.isArray(data0)){
 if(Object.keys(data0).length < 1){
-validate24.errors = [{instancePath:instancePath+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1"),schemaPath:"#/additionalProperties/minProperties",keyword:"minProperties",params:{limit: 1},message:"must NOT have fewer than 1 properties"}];
-return false;
+const err2 = {instancePath:instancePath+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1"),schemaPath:"#/additionalProperties/oneOf/0/minProperties",keyword:"minProperties",params:{limit: 1},message:"must NOT have fewer than 1 properties"};
+if(vErrors === null){
+vErrors = [err2];
 }
 else {
-const _errs5 = errors;
+vErrors.push(err2);
+}
+errors++;
+}
+else {
+const _errs7 = errors;
 for(const key2 in data0){
 if(!((key2 === "min") || (key2 === "max"))){
-validate24.errors = [{instancePath:instancePath+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1"),schemaPath:"#/additionalProperties/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key2},message:"must NOT have additional properties"}];
-return false;
+const err3 = {instancePath:instancePath+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1"),schemaPath:"#/additionalProperties/oneOf/0/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key2},message:"must NOT have additional properties"};
+if(vErrors === null){
+vErrors = [err3];
+}
+else {
+vErrors.push(err3);
+}
+errors++;
 break;
 }
 }
-if(_errs5 === errors){
+if(_errs7 === errors){
 if(data0.min !== undefined){
 let data1 = data0.min;
-const _errs6 = errors;
-const _errs7 = errors;
+const _errs8 = errors;
+const _errs9 = errors;
 if(!((typeof data1 == "number") && (!(data1 % 1) && !isNaN(data1)))){
-validate24.errors = [{instancePath:instancePath+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1")+"/min",schemaPath:"#/$defs/limit/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
-return false;
+const err4 = {instancePath:instancePath+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1")+"/min",schemaPath:"#/$defs/limit/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+if(vErrors === null){
+vErrors = [err4];
 }
-if(errors === _errs7){
+else {
+vErrors.push(err4);
+}
+errors++;
+}
+if(errors === _errs9){
 if(typeof data1 == "number"){
 if(data1 > 9007199254740991 || isNaN(data1)){
-validate24.errors = [{instancePath:instancePath+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1")+"/min",schemaPath:"#/$defs/limit/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
-return false;
+const err5 = {instancePath:instancePath+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1")+"/min",schemaPath:"#/$defs/limit/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
+if(vErrors === null){
+vErrors = [err5];
+}
+else {
+vErrors.push(err5);
+}
+errors++;
 }
 else {
 if(data1 < -9007199254740991 || isNaN(data1)){
-validate24.errors = [{instancePath:instancePath+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1")+"/min",schemaPath:"#/$defs/limit/minimum",keyword:"minimum",params:{comparison: ">=", limit: -9007199254740991},message:"must be >= -9007199254740991"}];
-return false;
-}
-}
-}
-}
-var valid2 = _errs6 === errors;
+const err6 = {instancePath:instancePath+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1")+"/min",schemaPath:"#/$defs/limit/minimum",keyword:"minimum",params:{comparison: ">=", limit: -9007199254740991},message:"must be >= -9007199254740991"};
+if(vErrors === null){
+vErrors = [err6];
 }
 else {
-var valid2 = true;
+vErrors.push(err6);
 }
-if(valid2){
+errors++;
+}
+}
+}
+}
+var valid3 = _errs8 === errors;
+}
+else {
+var valid3 = true;
+}
+if(valid3){
 if(data0.max !== undefined){
 let data2 = data0.max;
-const _errs9 = errors;
-const _errs10 = errors;
+const _errs11 = errors;
+const _errs12 = errors;
 if(!((typeof data2 == "number") && (!(data2 % 1) && !isNaN(data2)))){
-validate24.errors = [{instancePath:instancePath+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1")+"/max",schemaPath:"#/$defs/limit/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
-return false;
+const err7 = {instancePath:instancePath+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1")+"/max",schemaPath:"#/$defs/limit/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+if(vErrors === null){
+vErrors = [err7];
 }
-if(errors === _errs10){
+else {
+vErrors.push(err7);
+}
+errors++;
+}
+if(errors === _errs12){
 if(typeof data2 == "number"){
 if(data2 > 9007199254740991 || isNaN(data2)){
-validate24.errors = [{instancePath:instancePath+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1")+"/max",schemaPath:"#/$defs/limit/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
-return false;
+const err8 = {instancePath:instancePath+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1")+"/max",schemaPath:"#/$defs/limit/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
+if(vErrors === null){
+vErrors = [err8];
+}
+else {
+vErrors.push(err8);
+}
+errors++;
 }
 else {
 if(data2 < -9007199254740991 || isNaN(data2)){
-validate24.errors = [{instancePath:instancePath+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1")+"/max",schemaPath:"#/$defs/limit/minimum",keyword:"minimum",params:{comparison: ">=", limit: -9007199254740991},message:"must be >= -9007199254740991"}];
-return false;
-}
-}
-}
-}
-var valid2 = _errs9 === errors;
+const err9 = {instancePath:instancePath+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1")+"/max",schemaPath:"#/$defs/limit/minimum",keyword:"minimum",params:{comparison: ">=", limit: -9007199254740991},message:"must be >= -9007199254740991"};
+if(vErrors === null){
+vErrors = [err9];
 }
 else {
-var valid2 = true;
+vErrors.push(err9);
+}
+errors++;
+}
+}
+}
+}
+var valid3 = _errs11 === errors;
+}
+else {
+var valid3 = true;
 }
 }
 }
 }
 }
 else {
-validate24.errors = [{instancePath:instancePath+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1"),schemaPath:"#/additionalProperties/type",keyword:"type",params:{type: "object"},message:"must be object"}];
+const err10 = {instancePath:instancePath+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1"),schemaPath:"#/additionalProperties/oneOf/0/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err10];
+}
+else {
+vErrors.push(err10);
+}
+errors++;
+}
+}
+var _valid0 = _errs5 === errors;
+if(_valid0){
+valid2 = true;
+passing0 = 0;
+var props0 = true;
+}
+const _errs14 = errors;
+if(errors === _errs14){
+if(data0 && typeof data0 == "object" && !Array.isArray(data0)){
+let missing0;
+if((data0.one_of === undefined) && (missing0 = "one_of")){
+const err11 = {instancePath:instancePath+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1"),schemaPath:"#/additionalProperties/oneOf/1/required",keyword:"required",params:{missingProperty: missing0},message:"must have required property '"+missing0+"'"};
+if(vErrors === null){
+vErrors = [err11];
+}
+else {
+vErrors.push(err11);
+}
+errors++;
+}
+else {
+const _errs16 = errors;
+for(const key3 in data0){
+if(!(key3 === "one_of")){
+const err12 = {instancePath:instancePath+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1"),schemaPath:"#/additionalProperties/oneOf/1/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key3},message:"must NOT have additional properties"};
+if(vErrors === null){
+vErrors = [err12];
+}
+else {
+vErrors.push(err12);
+}
+errors++;
+break;
+}
+}
+if(_errs16 === errors){
+if(data0.one_of !== undefined){
+let data3 = data0.one_of;
+const _errs17 = errors;
+const _errs19 = errors;
+let valid7 = false;
+const _errs20 = errors;
+if(Array.isArray(data3)){
+var valid8 = true;
+const len0 = data3.length;
+for(let i0=0; i0<len0; i0++){
+let data4 = data3[i0];
+const _errs21 = errors;
+const _errs22 = errors;
+if(!((typeof data4 == "number") && (!(data4 % 1) && !isNaN(data4)))){
+const err13 = {instancePath:instancePath+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1")+"/one_of/" + i0,schemaPath:"#/$defs/limit/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+if(vErrors === null){
+vErrors = [err13];
+}
+else {
+vErrors.push(err13);
+}
+errors++;
+}
+if(errors === _errs22){
+if(typeof data4 == "number"){
+if(data4 > 9007199254740991 || isNaN(data4)){
+const err14 = {instancePath:instancePath+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1")+"/one_of/" + i0,schemaPath:"#/$defs/limit/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"};
+if(vErrors === null){
+vErrors = [err14];
+}
+else {
+vErrors.push(err14);
+}
+errors++;
+}
+else {
+if(data4 < -9007199254740991 || isNaN(data4)){
+const err15 = {instancePath:instancePath+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1")+"/one_of/" + i0,schemaPath:"#/$defs/limit/minimum",keyword:"minimum",params:{comparison: ">=", limit: -9007199254740991},message:"must be >= -9007199254740991"};
+if(vErrors === null){
+vErrors = [err15];
+}
+else {
+vErrors.push(err15);
+}
+errors++;
+}
+}
+}
+}
+var valid8 = _errs21 === errors;
+if(!valid8){
+break;
+}
+}
+}
+var _valid1 = _errs20 === errors;
+valid7 = valid7 || _valid1;
+if(_valid1){
+var items0 = true;
+}
+const _errs24 = errors;
+if(Array.isArray(data3)){
+var valid10 = true;
+const len1 = data3.length;
+for(let i1=0; i1<len1; i1++){
+let data5 = data3[i1];
+const _errs25 = errors;
+const _errs26 = errors;
+if(errors === _errs26){
+if(typeof data5 === "string"){
+if(!pattern14.test(data5)){
+const err16 = {instancePath:instancePath+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1")+"/one_of/" + i1,schemaPath:"#/$defs/text/pattern",keyword:"pattern",params:{pattern: "^[!-~]{1,64}$"},message:"must match pattern \""+"^[!-~]{1,64}$"+"\""};
+if(vErrors === null){
+vErrors = [err16];
+}
+else {
+vErrors.push(err16);
+}
+errors++;
+}
+}
+else {
+const err17 = {instancePath:instancePath+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1")+"/one_of/" + i1,schemaPath:"#/$defs/text/type",keyword:"type",params:{type: "string"},message:"must be string"};
+if(vErrors === null){
+vErrors = [err17];
+}
+else {
+vErrors.push(err17);
+}
+errors++;
+}
+}
+var valid10 = _errs25 === errors;
+if(!valid10){
+break;
+}
+}
+}
+var _valid1 = _errs24 === errors;
+valid7 = valid7 || _valid1;
+if(_valid1){
+if(items0 !== true){
+items0 = true;
+}
+}
+if(!valid7){
+const err18 = {instancePath:instancePath+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1")+"/one_of",schemaPath:"#/additionalProperties/oneOf/1/properties/one_of/anyOf",keyword:"anyOf",params:{},message:"must match a schema in anyOf"};
+if(vErrors === null){
+vErrors = [err18];
+}
+else {
+vErrors.push(err18);
+}
+errors++;
+}
+else {
+errors = _errs19;
+if(vErrors !== null){
+if(_errs19){
+vErrors.length = _errs19;
+}
+else {
+vErrors = null;
+}
+}
+}
+if(errors === _errs17){
+if(Array.isArray(data3)){
+if(data3.length > 32){
+const err19 = {instancePath:instancePath+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1")+"/one_of",schemaPath:"#/additionalProperties/oneOf/1/properties/one_of/maxItems",keyword:"maxItems",params:{limit: 32},message:"must NOT have more than 32 items"};
+if(vErrors === null){
+vErrors = [err19];
+}
+else {
+vErrors.push(err19);
+}
+errors++;
+}
+else {
+if(data3.length < 1){
+const err20 = {instancePath:instancePath+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1")+"/one_of",schemaPath:"#/additionalProperties/oneOf/1/properties/one_of/minItems",keyword:"minItems",params:{limit: 1},message:"must NOT have fewer than 1 items"};
+if(vErrors === null){
+vErrors = [err20];
+}
+else {
+vErrors.push(err20);
+}
+errors++;
+}
+else {
+let i2 = data3.length;
+let j0;
+if(i2 > 1){
+outer0:
+for(;i2--;){
+for(j0 = i2; j0--;){
+if(func0(data3[i2], data3[j0])){
+const err21 = {instancePath:instancePath+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1")+"/one_of",schemaPath:"#/additionalProperties/oneOf/1/properties/one_of/uniqueItems",keyword:"uniqueItems",params:{i: i2, j: j0},message:"must NOT have duplicate items (items ## "+j0+" and "+i2+" are identical)"};
+if(vErrors === null){
+vErrors = [err21];
+}
+else {
+vErrors.push(err21);
+}
+errors++;
+break outer0;
+}
+}
+}
+}
+}
+}
+}
+else {
+const err22 = {instancePath:instancePath+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1")+"/one_of",schemaPath:"#/additionalProperties/oneOf/1/properties/one_of/type",keyword:"type",params:{type: "array"},message:"must be array"};
+if(vErrors === null){
+vErrors = [err22];
+}
+else {
+vErrors.push(err22);
+}
+errors++;
+}
+}
+}
+}
+}
+}
+else {
+const err23 = {instancePath:instancePath+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1"),schemaPath:"#/additionalProperties/oneOf/1/type",keyword:"type",params:{type: "object"},message:"must be object"};
+if(vErrors === null){
+vErrors = [err23];
+}
+else {
+vErrors.push(err23);
+}
+errors++;
+}
+}
+var _valid0 = _errs14 === errors;
+if(_valid0 && valid2){
+valid2 = false;
+passing0 = [passing0, 1];
+}
+else {
+if(_valid0){
+valid2 = true;
+passing0 = 1;
+if(props0 !== true){
+props0 = true;
+}
+}
+}
+if(!valid2){
+const err24 = {instancePath:instancePath+"/" + key1.replace(/~/g, "~0").replace(/\//g, "~1"),schemaPath:"#/additionalProperties/oneOf",keyword:"oneOf",params:{passingSchemas: passing0},message:"must match exactly one schema in oneOf"};
+if(vErrors === null){
+vErrors = [err24];
+}
+else {
+vErrors.push(err24);
+}
+errors++;
+validate24.errors = vErrors;
 return false;
+}
+else {
+errors = _errs4;
+if(vErrors !== null){
+if(_errs4){
+vErrors.length = _errs4;
+}
+else {
+vErrors = null;
+}
 }
 }
 var valid1 = _errs3 === errors;
@@ -407,7 +739,6 @@ return errors === 0;
 }
 validate24.evaluated = {"props":true,"dynamicProps":false,"dynamicItems":false};
 
-const func0 = equal;
 
 function validate21(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 let vErrors = null;
@@ -1094,7 +1425,7 @@ validate21.errors = [{instancePath:instancePath+"/approval/timeout",schemaPath:"
 return false;
 }
 else {
-if(!pattern18.test(data18)){
+if(!pattern19.test(data18)){
 validate21.errors = [{instancePath:instancePath+"/approval/timeout",schemaPath:"#/$defs/approval/properties/timeout/pattern",keyword:"pattern",params:{pattern: "^PT([0-9]{1,5}H)?([0-9]{1,5}M)?([0-9]{1,5}S)?$"},message:"must match pattern \""+"^PT([0-9]{1,5}H)?([0-9]{1,5}M)?([0-9]{1,5}S)?$"+"\""}];
 return false;
 }
@@ -1524,25 +1855,37 @@ else {
 var valid0 = true;
 }
 if(valid0){
-if(data.rules !== undefined){
-let data6 = data.rules;
+if(data.enforce !== undefined){
 const _errs25 = errors;
-if(errors === _errs25){
-if(Array.isArray(data6)){
-if(data6.length > 200){
+if(false !== data.enforce){
+validate20.errors = [{instancePath:instancePath+"/enforce",schemaPath:"#/properties/enforce/const",keyword:"const",params:{allowedValue: false},message:"must be equal to constant"}];
+return false;
+}
+var valid0 = _errs25 === errors;
+}
+else {
+var valid0 = true;
+}
+if(valid0){
+if(data.rules !== undefined){
+let data7 = data.rules;
+const _errs26 = errors;
+if(errors === _errs26){
+if(Array.isArray(data7)){
+if(data7.length > 200){
 validate20.errors = [{instancePath:instancePath+"/rules",schemaPath:"#/properties/rules/maxItems",keyword:"maxItems",params:{limit: 200},message:"must NOT have more than 200 items"}];
 return false;
 }
 else {
 var valid7 = true;
-const len0 = data6.length;
+const len0 = data7.length;
 for(let i0=0; i0<len0; i0++){
-const _errs27 = errors;
-if(!(validate21(data6[i0], {instancePath:instancePath+"/rules/" + i0,parentData:data6,parentDataProperty:i0,rootData,dynamicAnchors}))){
+const _errs28 = errors;
+if(!(validate21(data7[i0], {instancePath:instancePath+"/rules/" + i0,parentData:data7,parentDataProperty:i0,rootData,dynamicAnchors}))){
 vErrors = vErrors === null ? validate21.errors : vErrors.concat(validate21.errors);
 errors = vErrors.length;
 }
-var valid7 = _errs27 === errors;
+var valid7 = _errs28 === errors;
 if(!valid7){
 break;
 }
@@ -1554,56 +1897,56 @@ validate20.errors = [{instancePath:instancePath+"/rules",schemaPath:"#/propertie
 return false;
 }
 }
-var valid0 = _errs25 === errors;
+var valid0 = _errs26 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
 if(data.default !== undefined){
-const _errs28 = errors;
+const _errs29 = errors;
 if("deny" !== data.default){
 validate20.errors = [{instancePath:instancePath+"/default",schemaPath:"#/properties/default/const",keyword:"const",params:{allowedValue: "deny"},message:"must be equal to constant"}];
 return false;
 }
-var valid0 = _errs28 === errors;
+var valid0 = _errs29 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
 if(data.approval !== undefined){
-let data9 = data.approval;
-const _errs29 = errors;
+let data10 = data.approval;
 const _errs30 = errors;
-if(errors === _errs30){
-if(data9 && typeof data9 == "object" && !Array.isArray(data9)){
+const _errs31 = errors;
+if(errors === _errs31){
+if(data10 && typeof data10 == "object" && !Array.isArray(data10)){
 let missing2;
-if(((data9.timeout === undefined) && (missing2 = "timeout")) || ((data9.approvers === undefined) && (missing2 = "approvers"))){
+if(((data10.timeout === undefined) && (missing2 = "timeout")) || ((data10.approvers === undefined) && (missing2 = "approvers"))){
 validate20.errors = [{instancePath:instancePath+"/approval",schemaPath:"#/$defs/approval/required",keyword:"required",params:{missingProperty: missing2},message:"must have required property '"+missing2+"'"}];
 return false;
 }
 else {
-const _errs32 = errors;
-for(const key2 in data9){
+const _errs33 = errors;
+for(const key2 in data10){
 if(!((key2 === "timeout") || (key2 === "approvers"))){
 validate20.errors = [{instancePath:instancePath+"/approval",schemaPath:"#/$defs/approval/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key2},message:"must NOT have additional properties"}];
 return false;
 break;
 }
 }
-if(_errs32 === errors){
-if(data9.timeout !== undefined){
-let data10 = data9.timeout;
-const _errs33 = errors;
-if(errors === _errs33){
-if(typeof data10 === "string"){
-if(func2(data10) < 4){
+if(_errs33 === errors){
+if(data10.timeout !== undefined){
+let data11 = data10.timeout;
+const _errs34 = errors;
+if(errors === _errs34){
+if(typeof data11 === "string"){
+if(func2(data11) < 4){
 validate20.errors = [{instancePath:instancePath+"/approval/timeout",schemaPath:"#/$defs/approval/properties/timeout/minLength",keyword:"minLength",params:{limit: 4},message:"must NOT have fewer than 4 characters"}];
 return false;
 }
 else {
-if(!pattern18.test(data10)){
+if(!pattern19.test(data11)){
 validate20.errors = [{instancePath:instancePath+"/approval/timeout",schemaPath:"#/$defs/approval/properties/timeout/pattern",keyword:"pattern",params:{pattern: "^PT([0-9]{1,5}H)?([0-9]{1,5}M)?([0-9]{1,5}S)?$"},message:"must match pattern \""+"^PT([0-9]{1,5}H)?([0-9]{1,5}M)?([0-9]{1,5}S)?$"+"\""}];
 return false;
 }
@@ -1614,35 +1957,35 @@ validate20.errors = [{instancePath:instancePath+"/approval/timeout",schemaPath:"
 return false;
 }
 }
-var valid9 = _errs33 === errors;
+var valid9 = _errs34 === errors;
 }
 else {
 var valid9 = true;
 }
 if(valid9){
-if(data9.approvers !== undefined){
-let data11 = data9.approvers;
-const _errs35 = errors;
-if(errors === _errs35){
-if(Array.isArray(data11)){
-if(data11.length < 1){
+if(data10.approvers !== undefined){
+let data12 = data10.approvers;
+const _errs36 = errors;
+if(errors === _errs36){
+if(Array.isArray(data12)){
+if(data12.length < 1){
 validate20.errors = [{instancePath:instancePath+"/approval/approvers",schemaPath:"#/$defs/approval/properties/approvers/minItems",keyword:"minItems",params:{limit: 1},message:"must NOT have fewer than 1 items"}];
 return false;
 }
 else {
 var valid10 = true;
-const len1 = data11.length;
+const len1 = data12.length;
 for(let i1=0; i1<len1; i1++){
-let data12 = data11[i1];
-const _errs37 = errors;
-if(errors === _errs37){
-if(typeof data12 === "string"){
-if(func2(data12) > 64){
+let data13 = data12[i1];
+const _errs38 = errors;
+if(errors === _errs38){
+if(typeof data13 === "string"){
+if(func2(data13) > 64){
 validate20.errors = [{instancePath:instancePath+"/approval/approvers/" + i1,schemaPath:"#/$defs/approval/properties/approvers/items/maxLength",keyword:"maxLength",params:{limit: 64},message:"must NOT have more than 64 characters"}];
 return false;
 }
 else {
-if(func2(data12) < 1){
+if(func2(data13) < 1){
 validate20.errors = [{instancePath:instancePath+"/approval/approvers/" + i1,schemaPath:"#/$defs/approval/properties/approvers/items/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"}];
 return false;
 }
@@ -1653,18 +1996,18 @@ validate20.errors = [{instancePath:instancePath+"/approval/approvers/" + i1,sche
 return false;
 }
 }
-var valid10 = _errs37 === errors;
+var valid10 = _errs38 === errors;
 if(!valid10){
 break;
 }
 }
 if(valid10){
-let i2 = data11.length;
+let i2 = data12.length;
 let j0;
 if(i2 > 1){
 const indices0 = {};
 for(;i2--;){
-let item0 = data11[i2];
+let item0 = data12[i2];
 if(typeof item0 !== "string"){
 continue;
 }
@@ -1685,7 +2028,7 @@ validate20.errors = [{instancePath:instancePath+"/approval/approvers",schemaPath
 return false;
 }
 }
-var valid9 = _errs35 === errors;
+var valid9 = _errs36 === errors;
 }
 else {
 var valid9 = true;
@@ -1699,47 +2042,47 @@ validate20.errors = [{instancePath:instancePath+"/approval",schemaPath:"#/$defs/
 return false;
 }
 }
-var valid0 = _errs29 === errors;
+var valid0 = _errs30 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
 if(data.limits !== undefined){
-let data13 = data.limits;
-const _errs39 = errors;
-if(errors === _errs39){
-if(data13 && typeof data13 == "object" && !Array.isArray(data13)){
+let data14 = data.limits;
+const _errs40 = errors;
+if(errors === _errs40){
+if(data14 && typeof data14 == "object" && !Array.isArray(data14)){
 let missing3;
-if((data13.max_actions_per_hour === undefined) && (missing3 = "max_actions_per_hour")){
+if((data14.max_actions_per_hour === undefined) && (missing3 = "max_actions_per_hour")){
 validate20.errors = [{instancePath:instancePath+"/limits",schemaPath:"#/properties/limits/required",keyword:"required",params:{missingProperty: missing3},message:"must have required property '"+missing3+"'"}];
 return false;
 }
 else {
-const _errs41 = errors;
-for(const key3 in data13){
+const _errs42 = errors;
+for(const key3 in data14){
 if(!(key3 === "max_actions_per_hour")){
 validate20.errors = [{instancePath:instancePath+"/limits",schemaPath:"#/properties/limits/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key3},message:"must NOT have additional properties"}];
 return false;
 break;
 }
 }
-if(_errs41 === errors){
-if(data13.max_actions_per_hour !== undefined){
-let data14 = data13.max_actions_per_hour;
-const _errs42 = errors;
-if(!((typeof data14 == "number") && (!(data14 % 1) && !isNaN(data14)))){
+if(_errs42 === errors){
+if(data14.max_actions_per_hour !== undefined){
+let data15 = data14.max_actions_per_hour;
+const _errs43 = errors;
+if(!((typeof data15 == "number") && (!(data15 % 1) && !isNaN(data15)))){
 validate20.errors = [{instancePath:instancePath+"/limits/max_actions_per_hour",schemaPath:"#/properties/limits/properties/max_actions_per_hour/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
 return false;
 }
-if(errors === _errs42){
-if(typeof data14 == "number"){
-if(data14 > 1000 || isNaN(data14)){
+if(errors === _errs43){
+if(typeof data15 == "number"){
+if(data15 > 1000 || isNaN(data15)){
 validate20.errors = [{instancePath:instancePath+"/limits/max_actions_per_hour",schemaPath:"#/properties/limits/properties/max_actions_per_hour/maximum",keyword:"maximum",params:{comparison: "<=", limit: 1000},message:"must be <= 1000"}];
 return false;
 }
 else {
-if(data14 < 1 || isNaN(data14)){
+if(data15 < 1 || isNaN(data15)){
 validate20.errors = [{instancePath:instancePath+"/limits/max_actions_per_hour",schemaPath:"#/properties/limits/properties/max_actions_per_hour/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"}];
 return false;
 }
@@ -1755,23 +2098,23 @@ validate20.errors = [{instancePath:instancePath+"/limits",schemaPath:"#/properti
 return false;
 }
 }
-var valid0 = _errs39 === errors;
+var valid0 = _errs40 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
 if(data.valid_from !== undefined){
-let data15 = data.valid_from;
-const _errs44 = errors;
+let data16 = data.valid_from;
 const _errs45 = errors;
-const _errs47 = errors;
+const _errs46 = errors;
 const _errs48 = errors;
 const _errs49 = errors;
-let valid15 = false;
 const _errs50 = errors;
-if(typeof data15 === "string"){
-if(!pattern20.test(data15)){
+let valid15 = false;
+const _errs51 = errors;
+if(typeof data16 === "string"){
+if(!pattern21.test(data16)){
 const err4 = {};
 if(vErrors === null){
 vErrors = [err4];
@@ -1782,11 +2125,11 @@ vErrors.push(err4);
 errors++;
 }
 }
-var _valid1 = _errs50 === errors;
+var _valid1 = _errs51 === errors;
 valid15 = valid15 || _valid1;
-const _errs51 = errors;
-if(typeof data15 === "string"){
-if(!pattern21.test(data15)){
+const _errs52 = errors;
+if(typeof data16 === "string"){
+if(!pattern22.test(data16)){
 const err5 = {};
 if(vErrors === null){
 vErrors = [err5];
@@ -1797,7 +2140,7 @@ vErrors.push(err5);
 errors++;
 }
 }
-var _valid1 = _errs51 === errors;
+var _valid1 = _errs52 === errors;
 valid15 = valid15 || _valid1;
 if(!valid15){
 const err6 = {};
@@ -1810,41 +2153,41 @@ vErrors.push(err6);
 errors++;
 }
 else {
-errors = _errs49;
+errors = _errs50;
 if(vErrors !== null){
-if(_errs49){
-vErrors.length = _errs49;
+if(_errs50){
+vErrors.length = _errs50;
 }
 else {
 vErrors = null;
 }
 }
 }
-var valid14 = _errs48 === errors;
+var valid14 = _errs49 === errors;
 if(valid14){
 validate20.errors = [{instancePath:instancePath+"/valid_from",schemaPath:"#/$defs/date_time/not",keyword:"not",params:{},message:"must NOT be valid"}];
 return false;
 }
 else {
-errors = _errs47;
+errors = _errs48;
 if(vErrors !== null){
-if(_errs47){
-vErrors.length = _errs47;
+if(_errs48){
+vErrors.length = _errs48;
 }
 else {
 vErrors = null;
 }
 }
 }
-if(errors === _errs45){
-if(errors === _errs45){
-if(typeof data15 === "string"){
-if(!pattern22.test(data15)){
+if(errors === _errs46){
+if(errors === _errs46){
+if(typeof data16 === "string"){
+if(!pattern23.test(data16)){
 validate20.errors = [{instancePath:instancePath+"/valid_from",schemaPath:"#/$defs/date_time/pattern",keyword:"pattern",params:{pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"},message:"must match pattern \""+"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"+"\""}];
 return false;
 }
 else {
-if(!(formats0(data15))){
+if(!(formats0(data16))){
 validate20.errors = [{instancePath:instancePath+"/valid_from",schemaPath:"#/$defs/date_time/format",keyword:"format",params:{format: "date-time"},message:"must match format \""+"date-time"+"\""}];
 return false;
 }
@@ -1856,23 +2199,23 @@ return false;
 }
 }
 }
-var valid0 = _errs44 === errors;
+var valid0 = _errs45 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
 if(data.expires !== undefined){
-let data16 = data.expires;
-const _errs52 = errors;
+let data17 = data.expires;
 const _errs53 = errors;
-const _errs55 = errors;
+const _errs54 = errors;
 const _errs56 = errors;
 const _errs57 = errors;
-let valid18 = false;
 const _errs58 = errors;
-if(typeof data16 === "string"){
-if(!pattern20.test(data16)){
+let valid18 = false;
+const _errs59 = errors;
+if(typeof data17 === "string"){
+if(!pattern21.test(data17)){
 const err7 = {};
 if(vErrors === null){
 vErrors = [err7];
@@ -1883,11 +2226,11 @@ vErrors.push(err7);
 errors++;
 }
 }
-var _valid2 = _errs58 === errors;
+var _valid2 = _errs59 === errors;
 valid18 = valid18 || _valid2;
-const _errs59 = errors;
-if(typeof data16 === "string"){
-if(!pattern21.test(data16)){
+const _errs60 = errors;
+if(typeof data17 === "string"){
+if(!pattern22.test(data17)){
 const err8 = {};
 if(vErrors === null){
 vErrors = [err8];
@@ -1898,7 +2241,7 @@ vErrors.push(err8);
 errors++;
 }
 }
-var _valid2 = _errs59 === errors;
+var _valid2 = _errs60 === errors;
 valid18 = valid18 || _valid2;
 if(!valid18){
 const err9 = {};
@@ -1911,41 +2254,41 @@ vErrors.push(err9);
 errors++;
 }
 else {
-errors = _errs57;
+errors = _errs58;
 if(vErrors !== null){
-if(_errs57){
-vErrors.length = _errs57;
+if(_errs58){
+vErrors.length = _errs58;
 }
 else {
 vErrors = null;
 }
 }
 }
-var valid17 = _errs56 === errors;
+var valid17 = _errs57 === errors;
 if(valid17){
 validate20.errors = [{instancePath:instancePath+"/expires",schemaPath:"#/$defs/date_time/not",keyword:"not",params:{},message:"must NOT be valid"}];
 return false;
 }
 else {
-errors = _errs55;
+errors = _errs56;
 if(vErrors !== null){
-if(_errs55){
-vErrors.length = _errs55;
+if(_errs56){
+vErrors.length = _errs56;
 }
 else {
 vErrors = null;
 }
 }
 }
-if(errors === _errs53){
-if(errors === _errs53){
-if(typeof data16 === "string"){
-if(!pattern22.test(data16)){
+if(errors === _errs54){
+if(errors === _errs54){
+if(typeof data17 === "string"){
+if(!pattern23.test(data17)){
 validate20.errors = [{instancePath:instancePath+"/expires",schemaPath:"#/$defs/date_time/pattern",keyword:"pattern",params:{pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"},message:"must match pattern \""+"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"+"\""}];
 return false;
 }
 else {
-if(!(formats0(data16))){
+if(!(formats0(data17))){
 validate20.errors = [{instancePath:instancePath+"/expires",schemaPath:"#/$defs/date_time/format",keyword:"format",params:{format: "date-time"},message:"must match format \""+"date-time"+"\""}];
 return false;
 }
@@ -1957,22 +2300,22 @@ return false;
 }
 }
 }
-var valid0 = _errs52 === errors;
+var valid0 = _errs53 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
 if(data.issuer !== undefined){
-let data17 = data.issuer;
-const _errs60 = errors;
+let data18 = data.issuer;
 const _errs61 = errors;
-const _errs63 = errors;
+const _errs62 = errors;
 const _errs64 = errors;
-let valid21 = true;
 const _errs65 = errors;
-if(typeof data17 === "string"){
-if(!pattern6.test(data17)){
+let valid21 = true;
+const _errs66 = errors;
+if(typeof data18 === "string"){
+if(!pattern6.test(data18)){
 const err10 = {};
 if(vErrors === null){
 vErrors = [err10];
@@ -1983,11 +2326,11 @@ vErrors.push(err10);
 errors++;
 }
 }
-var _valid3 = _errs65 === errors;
-errors = _errs64;
+var _valid3 = _errs66 === errors;
+errors = _errs65;
 if(vErrors !== null){
-if(_errs64){
-vErrors.length = _errs64;
+if(_errs65){
+vErrors.length = _errs65;
 }
 else {
 vErrors = null;
@@ -1995,23 +2338,23 @@ vErrors = null;
 }
 let ifClause1;
 if(_valid3){
-const _errs66 = errors;
-if(typeof data17 === "string"){
-if(!pattern7.test(data17)){
+const _errs67 = errors;
+if(typeof data18 === "string"){
+if(!pattern7.test(data18)){
 validate20.errors = [{instancePath:instancePath+"/issuer",schemaPath:"#/$defs/uri/allOf/0/then/pattern",keyword:"pattern",params:{pattern: "^https://[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:[0-9]{1,5})?/[A-Za-z0-9._~%!$&'()*+,;=:/?-]*$"},message:"must match pattern \""+"^https://[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:[0-9]{1,5})?/[A-Za-z0-9._~%!$&'()*+,;=:/?-]*$"+"\""}];
 return false;
 }
 }
-var _valid3 = _errs66 === errors;
+var _valid3 = _errs67 === errors;
 valid21 = _valid3;
 ifClause1 = "then";
 }
 else {
-const _errs67 = errors;
 const _errs68 = errors;
 const _errs69 = errors;
-if(typeof data17 === "string"){
-if(!pattern8.test(data17)){
+const _errs70 = errors;
+if(typeof data18 === "string"){
+if(!pattern8.test(data18)){
 const err11 = {};
 if(vErrors === null){
 vErrors = [err11];
@@ -2022,31 +2365,31 @@ vErrors.push(err11);
 errors++;
 }
 }
-var valid22 = _errs69 === errors;
+var valid22 = _errs70 === errors;
 if(valid22){
 validate20.errors = [{instancePath:instancePath+"/issuer",schemaPath:"#/$defs/uri/allOf/0/else/not",keyword:"not",params:{},message:"must NOT be valid"}];
 return false;
 }
 else {
-errors = _errs68;
+errors = _errs69;
 if(vErrors !== null){
-if(_errs68){
-vErrors.length = _errs68;
+if(_errs69){
+vErrors.length = _errs69;
 }
 else {
 vErrors = null;
 }
 }
 }
-if(errors === _errs67){
-if(typeof data17 === "string"){
-if(!pattern9.test(data17)){
+if(errors === _errs68){
+if(typeof data18 === "string"){
+if(!pattern9.test(data18)){
 validate20.errors = [{instancePath:instancePath+"/issuer",schemaPath:"#/$defs/uri/allOf/0/else/pattern",keyword:"pattern",params:{pattern: "^[a-z][a-z0-9+.-]{0,31}:[A-Za-z0-9._~:/-]{1,256}$"},message:"must match pattern \""+"^[a-z][a-z0-9+.-]{0,31}:[A-Za-z0-9._~:/-]{1,256}$"+"\""}];
 return false;
 }
 }
 }
-var _valid3 = _errs67 === errors;
+var _valid3 = _errs68 === errors;
 valid21 = _valid3;
 ifClause1 = "else";
 }
@@ -2062,13 +2405,13 @@ errors++;
 validate20.errors = vErrors;
 return false;
 }
-var valid20 = _errs63 === errors;
+var valid20 = _errs64 === errors;
 if(valid20){
-const _errs70 = errors;
 const _errs71 = errors;
 const _errs72 = errors;
-if(typeof data17 === "string"){
-if(!pattern10.test(data17)){
+const _errs73 = errors;
+if(typeof data18 === "string"){
+if(!pattern10.test(data18)){
 const err13 = {};
 if(vErrors === null){
 vErrors = [err13];
@@ -2079,27 +2422,27 @@ vErrors.push(err13);
 errors++;
 }
 }
-var valid23 = _errs72 === errors;
+var valid23 = _errs73 === errors;
 if(valid23){
 validate20.errors = [{instancePath:instancePath+"/issuer",schemaPath:"#/$defs/uri/allOf/1/not",keyword:"not",params:{},message:"must NOT be valid"}];
 return false;
 }
 else {
-errors = _errs71;
+errors = _errs72;
 if(vErrors !== null){
-if(_errs71){
-vErrors.length = _errs71;
+if(_errs72){
+vErrors.length = _errs72;
 }
 else {
 vErrors = null;
 }
 }
 }
-var valid20 = _errs70 === errors;
+var valid20 = _errs71 === errors;
 }
-if(errors === _errs61){
-if(typeof data17 === "string"){
-if(func2(data17) > 512){
+if(errors === _errs62){
+if(typeof data18 === "string"){
+if(func2(data18) > 512){
 validate20.errors = [{instancePath:instancePath+"/issuer",schemaPath:"#/$defs/uri/maxLength",keyword:"maxLength",params:{limit: 512},message:"must NOT have more than 512 characters"}];
 return false;
 }
@@ -2109,50 +2452,50 @@ validate20.errors = [{instancePath:instancePath+"/issuer",schemaPath:"#/$defs/ur
 return false;
 }
 }
-var valid0 = _errs60 === errors;
+var valid0 = _errs61 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
 if(data.version !== undefined){
-let data18 = data.version;
-const _errs73 = errors;
-if(!((typeof data18 == "number") && (!(data18 % 1) && !isNaN(data18)))){
+let data19 = data.version;
+const _errs74 = errors;
+if(!((typeof data19 == "number") && (!(data19 % 1) && !isNaN(data19)))){
 validate20.errors = [{instancePath:instancePath+"/version",schemaPath:"#/properties/version/type",keyword:"type",params:{type: "integer"},message:"must be integer"}];
 return false;
 }
-if(errors === _errs73){
-if(typeof data18 == "number"){
-if(data18 > 9007199254740991 || isNaN(data18)){
+if(errors === _errs74){
+if(typeof data19 == "number"){
+if(data19 > 9007199254740991 || isNaN(data19)){
 validate20.errors = [{instancePath:instancePath+"/version",schemaPath:"#/properties/version/maximum",keyword:"maximum",params:{comparison: "<=", limit: 9007199254740991},message:"must be <= 9007199254740991"}];
 return false;
 }
 else {
-if(data18 < 1 || isNaN(data18)){
+if(data19 < 1 || isNaN(data19)){
 validate20.errors = [{instancePath:instancePath+"/version",schemaPath:"#/properties/version/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"}];
 return false;
 }
 }
 }
 }
-var valid0 = _errs73 === errors;
+var valid0 = _errs74 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
 if(data.created_by !== undefined){
-let data19 = data.created_by;
-const _errs75 = errors;
-if(errors === _errs75){
-if(typeof data19 === "string"){
-if(func2(data19) > 128){
+let data20 = data.created_by;
+const _errs76 = errors;
+if(errors === _errs76){
+if(typeof data20 === "string"){
+if(func2(data20) > 128){
 validate20.errors = [{instancePath:instancePath+"/created_by",schemaPath:"#/properties/created_by/maxLength",keyword:"maxLength",params:{limit: 128},message:"must NOT have more than 128 characters"}];
 return false;
 }
 else {
-if(func2(data19) < 1){
+if(func2(data20) < 1){
 validate20.errors = [{instancePath:instancePath+"/created_by",schemaPath:"#/properties/created_by/minLength",keyword:"minLength",params:{limit: 1},message:"must NOT have fewer than 1 characters"}];
 return false;
 }
@@ -2163,23 +2506,23 @@ validate20.errors = [{instancePath:instancePath+"/created_by",schemaPath:"#/prop
 return false;
 }
 }
-var valid0 = _errs75 === errors;
+var valid0 = _errs76 === errors;
 }
 else {
 var valid0 = true;
 }
 if(valid0){
 if(data.created_at !== undefined){
-let data20 = data.created_at;
-const _errs77 = errors;
+let data21 = data.created_at;
 const _errs78 = errors;
-const _errs80 = errors;
+const _errs79 = errors;
 const _errs81 = errors;
 const _errs82 = errors;
-let valid26 = false;
 const _errs83 = errors;
-if(typeof data20 === "string"){
-if(!pattern20.test(data20)){
+let valid26 = false;
+const _errs84 = errors;
+if(typeof data21 === "string"){
+if(!pattern21.test(data21)){
 const err14 = {};
 if(vErrors === null){
 vErrors = [err14];
@@ -2190,11 +2533,11 @@ vErrors.push(err14);
 errors++;
 }
 }
-var _valid4 = _errs83 === errors;
+var _valid4 = _errs84 === errors;
 valid26 = valid26 || _valid4;
-const _errs84 = errors;
-if(typeof data20 === "string"){
-if(!pattern21.test(data20)){
+const _errs85 = errors;
+if(typeof data21 === "string"){
+if(!pattern22.test(data21)){
 const err15 = {};
 if(vErrors === null){
 vErrors = [err15];
@@ -2205,7 +2548,7 @@ vErrors.push(err15);
 errors++;
 }
 }
-var _valid4 = _errs84 === errors;
+var _valid4 = _errs85 === errors;
 valid26 = valid26 || _valid4;
 if(!valid26){
 const err16 = {};
@@ -2218,41 +2561,41 @@ vErrors.push(err16);
 errors++;
 }
 else {
-errors = _errs82;
+errors = _errs83;
 if(vErrors !== null){
-if(_errs82){
-vErrors.length = _errs82;
+if(_errs83){
+vErrors.length = _errs83;
 }
 else {
 vErrors = null;
 }
 }
 }
-var valid25 = _errs81 === errors;
+var valid25 = _errs82 === errors;
 if(valid25){
 validate20.errors = [{instancePath:instancePath+"/created_at",schemaPath:"#/$defs/date_time/not",keyword:"not",params:{},message:"must NOT be valid"}];
 return false;
 }
 else {
-errors = _errs80;
+errors = _errs81;
 if(vErrors !== null){
-if(_errs80){
-vErrors.length = _errs80;
+if(_errs81){
+vErrors.length = _errs81;
 }
 else {
 vErrors = null;
 }
 }
 }
-if(errors === _errs78){
-if(errors === _errs78){
-if(typeof data20 === "string"){
-if(!pattern22.test(data20)){
+if(errors === _errs79){
+if(errors === _errs79){
+if(typeof data21 === "string"){
+if(!pattern23.test(data21)){
 validate20.errors = [{instancePath:instancePath+"/created_at",schemaPath:"#/$defs/date_time/pattern",keyword:"pattern",params:{pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"},message:"must match pattern \""+"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})$"+"\""}];
 return false;
 }
 else {
-if(!(formats0(data20))){
+if(!(formats0(data21))){
 validate20.errors = [{instancePath:instancePath+"/created_at",schemaPath:"#/$defs/date_time/format",keyword:"format",params:{format: "date-time"},message:"must match format \""+"date-time"+"\""}];
 return false;
 }
@@ -2264,7 +2607,7 @@ return false;
 }
 }
 }
-var valid0 = _errs77 === errors;
+var valid0 = _errs78 === errors;
 }
 else {
 var valid0 = true;
@@ -2285,6 +2628,7 @@ validate20.errors = [{instancePath,schemaPath:"#/dependentRequired",keyword:"dep
     depsCount: 1,
     deps: "issuer"},message:"must have property issuer when property version is present"}];
 return false;
+}
 }
 }
 }
