@@ -31,9 +31,11 @@ const result = evaluate(mandate, {
 // { decision: "ask", reason: "rule", rule_id: "r-locks", approval: {…}, mandate_digest: "sha256:…" }
 ```
 
-The resource (category, area, critical marking), the time and the time zone are determined by
-the caller from its own directory, clock and configuration, never taken from the agent
-(SPEC-v0 section 4).
+The resource (category, set of `areas`, critical marking), the time and the time zone are
+determined by the caller from its own directory, clock and configuration, never taken from the
+agent (SPEC-v0 section 4). Parameters are integers in the units of the vocabulary or strings
+(`{ mode: "heat" }`); whoever reads them from JSON text reads numbers with `exactNumber`, so
+that a fraction such as `50.00000000000000000001` is never taken for an integer (section 4.5).
 
 ### In a web browser
 

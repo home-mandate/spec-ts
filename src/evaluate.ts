@@ -4,13 +4,19 @@
 import type { Approval, Decision, Mandate, Rule } from "./mandate.ts";
 import { tryParseMandate } from "./mandate.ts";
 import { parseJson, isObject } from "./ijson.ts";
+import { MAX_AREAS, opaque, type ParameterValue, parametersAdmitted, validValue } from "./parameters.ts";
 import { vocabulary } from "./spec-data.ts";
 import { type Instant, type LocalTime, localTime, parseTimestamp } from "./time.ts";
 
 export interface Resource {
   entity_id: string;
   category?: string;
-  area?: string;
+  /**
+   * The set of areas of the resource (SPEC-v0 section 3.4): its room and every location
+   * above it, or several rooms side by side; at most 16, no duplicates, order irrelevant.
+   * Absent or empty: the resource has no area.
+   */
+  areas?: readonly string[];
   critical?: boolean;
 }
 
@@ -18,7 +24,12 @@ export interface Resource {
 export interface Request {
   resource: Resource;
   action: string;
-  parameters?: Record<string, number>;
+  /**
+   * Parameters of the action (SPEC-v0 section 4.5): integers in the units of the
+   * vocabulary, or strings. Whoever reads them from JSON text reads numbers by their exact
+   * value (exactNumber), so that a fraction is never rounded to an integer.
+   */
+  parameters?: Readonly<Record<string, ParameterValue>>;
   time: string;
   timezone?: string;
   revoked?: boolean;
@@ -32,12 +43,18 @@ export interface Result {
   mandate_digest?: string;
 }
 
-function opaque(s: string | undefined, limit: number): boolean {
-  return typeof s === "string" && s.length >= 1 && s.length <= limit && /^[!-~]+$/.test(s);
+/** Whether the areas are a set of at most 16 area identifiers without duplicates. */
+function validAreas(areas: unknown): boolean {
+  if (areas === undefined) return true;
+  if (!Array.isArray(areas) || areas.length > MAX_AREAS) return false;
+  return areas.every((area, i) => opaque(area, 64) && areas.indexOf(area) === i);
 }
 
-function integer(n: number): boolean {
-  return Number.isInteger(n) && Math.abs(n) <= Number.MAX_SAFE_INTEGER;
+/** Whether the parameters are values a request may carry, of the types and ranges the vocabulary declares. */
+function validParameters(req: Request): boolean {
+  const parameters = req.parameters ?? {};
+  if (typeof parameters !== "object" || parameters === null) return false;
+  return Object.values(parameters).every(validValue) && parametersAdmitted(req.resource.category, req.action, parameters);
 }
 
 const STRICTNESS: Record<Decision, number> = { allow: 0, ask: 1, deny: 2 };
@@ -47,7 +64,7 @@ function matches(rule: Rule, req: Request, local: LocalTime): boolean {
   const resource = s.any === true ||
     ((s.entity_id === undefined || s.entity_id === req.resource.entity_id) &&
       (s.category === undefined || s.category === req.resource.category) &&
-      (s.area === undefined || s.area === req.resource.area));
+      (s.area === undefined || (req.resource.areas ?? []).includes(s.area)));
   if (!resource) return false;
   if (!rule.actions.includes("*") && !rule.actions.includes(req.action)) return false;
   if (rule.window) {
@@ -57,8 +74,10 @@ function matches(rule: Rule, req: Request, local: LocalTime): boolean {
   }
   if (rule.weekdays && !rule.weekdays.includes(local.weekday)) return false;
   return rule.constraints.every((c) => {
-    const value = req.parameters?.[c.parameter];
-    return value !== undefined && value >= c.min && value <= c.max;
+    const value = req.parameters !== undefined && Object.hasOwn(req.parameters, c.parameter) ? req.parameters[c.parameter] : undefined;
+    if (value === undefined) return false;
+    if (c.oneOf !== null) return c.oneOf.includes(value);
+    return typeof value === "number" && value >= c.min && value <= c.max;
   });
 }
 
@@ -82,9 +101,7 @@ export function evaluate(mandate: Mandate | null, req: Request): Result {
   if (!mandate) return deny("invalid_mandate");
   const at: Instant | null = typeof req.time === "string" ? parseTimestamp(req.time) : null;
   const local = at ? localTime(at, req.timezone) : null;
-  const parameters = Object.values(req.parameters ?? {});
-  if (!at || !local || !opaque(req.resource.entity_id, 255) ||
-    (req.resource.area !== undefined && !opaque(req.resource.area, 64)) || !parameters.every(integer)) {
+  if (!at || !local || !opaque(req.resource.entity_id, 255) || !validAreas(req.resource.areas) || !validParameters(req)) {
     return deny("invalid_request", mandate);
   }
   const category = req.resource.category;

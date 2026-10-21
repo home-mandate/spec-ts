@@ -5,10 +5,17 @@
 import codepointFile from "../spec/data/forbidden-codepoints-v0.json" with { type: "json" };
 import vocabularyFile from "../spec/vocabulary/v0.json" with { type: "json" };
 
+/**
+ * A parameter of an action (SPEC-v0 sections 4.5 and 5): an integer in a unit, with an
+ * optional inclusive range, or a string, with optional permitted values.
+ */
 export interface VocabularyParameter {
+  type: "integer" | "string";
   unit?: string;
   minimum?: number;
   maximum?: number;
+  values?: readonly string[];
+  description?: string;
 }
 
 export interface VocabularyAction {

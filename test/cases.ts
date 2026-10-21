@@ -7,14 +7,26 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type * as Browser from "../src/browser.ts";
+import { exactNumber } from "../src/number.ts";
 import { specFile } from "../src/spec.ts";
 
 export type Case = Record<string, any>;
 
 type Library = Pick<typeof Browser, "evaluate" | "isSuccessor" | "selectAndEvaluate" | "tryParseMandate">;
 
+// Node.js has JSON.rawJSON; the TypeScript library does not declare it yet.
+const rawJSON = (JSON as unknown as { rawJSON(text: string): unknown }).rawJSON;
+
+// A number whose exact value floating point does not keep (50.00000000000000000001, 1e-400)
+// stays in its spelling, so that JSON.stringify writes it as the file does and the library
+// reads it by its exact value, as the test tool passes it.
+function keepInexact(_key: string, value: unknown, context?: { source?: string }): unknown {
+  const source = context?.source;
+  return typeof value === "number" && source !== undefined && Number.isNaN(exactNumber(source)) ? rawJSON(source) : value;
+}
+
 export function cases(path: string, key = "cases"): Case[] {
-  const list = JSON.parse(specFile(path))[key] as Case[];
+  const list = JSON.parse(specFile(path), keepInexact as never)[key] as Case[];
   assert.ok(list.length > 0, `${path} has no cases`);
   return list;
 }
@@ -24,8 +36,14 @@ function mandateText(c: Case): string {
   return c.mandate_raw ?? JSON.stringify(c.mandate_inline);
 }
 
+/** Parameters as a harness reads them from JSON text: numbers by their exact value. */
+function parameters(given: Case | undefined): Browser.Request["parameters"] {
+  if (given === undefined) return undefined;
+  return Object.fromEntries(Object.entries(given).map(([name, v]) => [name, typeof v === "string" ? v : exactNumber(JSON.stringify(v))]));
+}
+
 function request(c: Case): Browser.Request {
-  return { resource: c.resource, action: c.action, parameters: c.parameters, time: c.time, timezone: c.timezone, revoked: c.revoked };
+  return { resource: c.resource, action: c.action, parameters: parameters(c.parameters), time: c.time, timezone: c.timezone, revoked: c.revoked };
 }
 
 function assertOutcome(c: Case, result: Browser.Result): void {

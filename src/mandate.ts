@@ -4,6 +4,7 @@
 import { displayable } from "./displaytext.ts";
 import { isObject, type Json, JsonError, parseJson, utf8Length } from "./ijson.ts";
 import { digest } from "./jcs.ts";
+import { declares, MAX_ONE_OF, type ParameterValue, validValue } from "./parameters.ts";
 import { validateMandate } from "./generated/mandate-validator.ts";
 import { describeViolation, type SchemaValidator } from "./schema-runtime.ts";
 import { vocabulary } from "./spec-data.ts";
@@ -22,6 +23,18 @@ export interface Approval {
   approvers: string[];
 }
 
+/**
+ * What a rule permits for one parameter (SPEC-v0 section 4.5): the inclusive range of an
+ * integer (a limit the rule does not give is infinite), or, if oneOf is not null, exactly
+ * the listed values.
+ */
+export interface Constraint {
+  parameter: string;
+  min: number;
+  max: number;
+  oneOf: readonly ParameterValue[] | null;
+}
+
 export interface Rule {
   id: string;
   resource: { any?: boolean; entity_id?: string; category?: string; area?: string };
@@ -29,7 +42,7 @@ export interface Rule {
   decision: Decision;
   window: { start: number; end: number } | null;
   weekdays: number[] | null;
-  constraints: { parameter: string; min: number; max: number }[];
+  constraints: Constraint[];
   approval: Approval | null;
   allowCritical: boolean;
 }
@@ -74,10 +87,40 @@ function knownAction(category: string | undefined, action: string): boolean {
   return Object.values(vocabulary).some((c) => action in c.actions);
 }
 
-function hasParameter(category: string | undefined, action: string, parameter: string): boolean {
-  return Object.entries(vocabulary).some(
-    ([name, c]) => (category === undefined || name === category) && parameter in (c.actions[action]?.parameters ?? {}),
-  );
+/**
+ * Whether the constraint fits a parameter of the action (SPEC-v0 section 3.1 item 10): a
+ * range only an integer parameter, a list only values the parameter declares; in the
+ * given category, or without one in any category of the vocabulary.
+ */
+function parameterFits(category: string | undefined, action: string, c: Constraint): boolean {
+  return Object.entries(vocabulary).some(([name, vocabularyCategory]) => {
+    if (category !== undefined && name !== category) return false;
+    const p = vocabularyCategory.actions[action]?.parameters?.[c.parameter];
+    if (!p) return false;
+    return c.oneOf === null ? p.type === "integer" : c.oneOf.every((v) => declares(p, v));
+  });
+}
+
+/** Reads one constraint: a list of permitted values, or limits (SPEC-v0 section 4.5). */
+function constraint(id: string, parameter: string, raw: Json): Constraint {
+  const given = raw as { min?: number; max?: number; one_of?: Json[] };
+  const oneOf = given.one_of;
+  if (oneOf === undefined) {
+    const { min = -Infinity, max = Infinity } = given;
+    if (min > max) fail(`rule ${id}: constraint ${parameter} has min greater than max`);
+    return { parameter, min, max, oneOf: null };
+  }
+  // The schema checks the list already; checked again so that no list contradicts section 4.5.
+  if (given.min !== undefined || given.max !== undefined) fail(`rule ${id}: constraint ${parameter} has one_of together with min or max`);
+  if (oneOf.length < 1 || oneOf.length > MAX_ONE_OF) fail(`rule ${id}: constraint ${parameter} needs 1 to ${MAX_ONE_OF} values`);
+  const values: ParameterValue[] = [];
+  for (const v of oneOf) {
+    if (!validValue(v)) fail(`rule ${id}: constraint ${parameter} has a value that is no parameter value`);
+    if (typeof v !== typeof oneOf[0]) fail(`rule ${id}: constraint ${parameter} mixes integers and strings`);
+    if (values.includes(v)) fail(`rule ${id}: constraint ${parameter} has a value twice`);
+    values.push(v);
+  }
+  return { parameter, min: -Infinity, max: Infinity, oneOf: Object.freeze(values) };
 }
 
 function clock(text: string): number {
@@ -107,13 +150,12 @@ function rule(raw: { [key: string]: Json }): Rule {
   }
   const constraints: Rule["constraints"] = [];
   if (isObject(raw.constraints)) {
-    for (const [parameter, limits] of Object.entries(raw.constraints)) {
-      const { min = -Infinity, max = Infinity } = limits as { min?: number; max?: number };
-      if (min > max) fail(`rule ${id}: constraint ${parameter} has min greater than max`);
+    for (const [parameter, given] of Object.entries(raw.constraints)) {
+      const c = constraint(id, parameter, given);
       for (const action of actions) {
-        if (checked && !hasParameter(category, action, parameter)) fail(`rule ${id}: ${action} has no parameter ${parameter}`);
+        if (checked && !parameterFits(category, action, c)) fail(`rule ${id}: ${action} has no parameter ${parameter} that the constraint fits`);
       }
-      constraints.push({ parameter, min, max });
+      constraints.push(c);
     }
   }
   return {

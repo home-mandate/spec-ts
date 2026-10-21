@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
-export { parseMandate, tryParseMandate, MandateError, type Mandate, type Decision, type Approval } from "./mandate.ts";
+export { parseMandate, tryParseMandate, MandateError, type Mandate, type Decision, type Approval, type Constraint } from "./mandate.ts";
+export { exactNumber } from "./number.ts";
+export type { ParameterValue } from "./parameters.ts";
 export { evaluate, selectAndEvaluate, isSuccessor, isCritical, type Request, type Resource, type Result, type Stored } from "./evaluate.ts";
 export { verifyAudit, verifyAuditLines, entryDigest, type Anchor, type AuditResult } from "./audit.ts";
 export { parseJwks, verifySigned, verifyDetached, SignatureError, type Keys } from "./jws.ts";
