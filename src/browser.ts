@@ -8,8 +8,10 @@
 // cases of the specification against it.
 export {
   parseMandate, tryParseMandate, MandateError, timeoutSeconds,
-  type Mandate, type Rule, type Decision, type Approval,
+  type Mandate, type Rule, type Decision, type Approval, type Constraint,
 } from "./mandate.ts";
+export { exactNumber } from "./number.ts";
+export type { ParameterValue } from "./parameters.ts";
 export {
   evaluate, selectAndEvaluate, isSuccessor, isCritical,
   type Request, type Resource, type Result, type Stored,

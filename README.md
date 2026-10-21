@@ -31,9 +31,14 @@ const result = evaluate(mandate, {
 // { decision: "ask", reason: "rule", rule_id: "r-locks", approval: {…}, mandate_digest: "sha256:…" }
 ```
 
-The resource (category, area, critical marking), the time and the time zone are determined by
-the caller from its own directory, clock and configuration, never taken from the agent
-(SPEC-v0 section 4).
+The resource (category, set of `areas`, critical marking), the time and the time zone are
+determined by the caller from its own directory, clock and configuration, never taken from the
+agent (SPEC-v0 section 4). Parameters are integers in the units of the vocabulary or strings
+(`{ mode: "heat" }`); whoever reads them from JSON text reads numbers with `exactNumber`, so
+that a fraction such as `50.00000000000000000001` is never taken for an integer (section 4.5).
+For a mandate in audit mode (`"enforce": false`), a `deny` by its rules for an action that is
+not critical carries `enforced: false`: the caller executes the request and records it
+(section 4.6).
 
 ### In a web browser
 
@@ -92,6 +97,7 @@ format v0 → 0.x, format v1 → 1.x. Which exact specification tag it implement
 | v0.1.0-alpha.3 | v0.1.0-alpha.3 |
 | v0.1.0-alpha.4 | v0.1.0-alpha.4 |
 | v0.1.0-rc.1 | v0.1.0-rc.1 |
+| v0.1.0-rc.3 | v0.1.0-rc.3 |
 
 From the specification's `v0.1.0` on, the v0 formats (mandate, audit entry, audit checkpoint)
 are frozen; an incompatible change then comes with a new format major. Reading v0 data as part

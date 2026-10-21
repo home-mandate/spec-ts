@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as library from "../src/index.ts";
 import { entryDigest, parseJwks, verifyAudit, verifyAuditLines, verifySigned, type Json } from "../src/index.ts";
-import { answer } from "../src/harness.ts";
+import { answer, readMessage } from "../src/harness.ts";
 import { specFile } from "../src/spec.ts";
 import { type Case, cases, mandateConformance } from "./cases.ts";
 
@@ -64,8 +64,44 @@ test("harness answers every operation and rejects unknown ones", () => {
   const example = specFile("examples/voice-assistant.json");
   const response = answer({
     op: "evaluate", mandate: example,
-    request: { resource: { entity_id: "lock.haustuer", category: "lock", area: "flur" }, action: "unlock", time: "2026-10-12T19:00:00+02:00" },
+    request: { resource: { entity_id: "lock.haustuer", category: "lock", areas: ["flur"] }, action: "unlock", time: "2026-10-12T19:00:00+02:00" },
   }) as Case;
   assert.equal(response.decision, "ask");
   assert.equal(response.approval_timeout, "PT2M");
+});
+
+test("harness refuses members the test interface does not define", () => {
+  const request = { resource: { entity_id: "light.desk", category: "light", area: "office" }, action: "turn_on", time: "2026-10-12T19:00:00+02:00" };
+  assert.deepEqual(answer({ op: "evaluate", mandate: "{}", request }), { error: "undefined member area" });
+  assert.deepEqual(answer({ op: "validate", mandate: "{}", extra: 1 } as never), { error: "undefined member extra" });
+  assert.deepEqual(
+    answer({ op: "select", mandates: [{ mandate: "{}", stale: true }], subject: { client_id: "c", principal: "p" }, request } as never),
+    { error: "undefined member area" },
+  );
+});
+
+test("harness reads parameters by their exact value and reports a deny that is not enforced", () => {
+  const mandate = specFile("conformance/mandates/one-of.json");
+  const line = (brightness: string) =>
+    `{"op":"evaluate","mandate":${JSON.stringify(mandate)},"request":{"resource":{"entity_id":"light.desk","category":"light"},"action":"set","parameters":{"brightness":${brightness}},"time":"2026-10-12T12:00:00+02:00"}}`;
+  assert.equal((answer(readMessage(line("50.00000000000000000001"))) as Case).reason, "invalid_request");
+  assert.notEqual((answer(readMessage(line("5e1"))) as Case).reason, "invalid_request");
+  const audit = specFile("conformance/mandates/audit-mode.json");
+  const denied = answer({
+    op: "evaluate", mandate: audit,
+    request: { resource: { entity_id: "switch.unknown", category: "switch" }, action: "turn_on", time: "2026-10-12T12:00:00+02:00" },
+  }) as Case;
+  assert.equal(denied.decision, "deny");
+  assert.equal(denied.enforced, false);
+});
+
+test("cases for sets of areas, parameters and audit mode are part of the files", () => {
+  const ids = (path: string, key = "cases") => new Set(cases(path, key).map((c) => c.id as string));
+  const expect = (set: Set<string>, prefix: string, from: number, to: number) => {
+    for (let n = from; n <= to; n++) assert.ok(set.has(`${prefix}${n}`), `${prefix}${n} is missing`);
+  };
+  expect(ids("conformance/cases-v0.json"), "c", 140, 192);
+  expect(ids("conformance/invalid-v0.json"), "i", 129, 148);
+  expect(ids("conformance/digest-v0.json"), "d", 41, 44);
+  expect(ids("conformance/audit-v0.json", "logs"), "a", 106, 125);
 });

@@ -7,6 +7,7 @@ import { canonicalize, digest } from "./jcs.ts";
 import { type Keys, verifyDetached } from "./jws.ts";
 import { validateAudit } from "./generated/audit-validator.ts";
 import type { SchemaValidator } from "./schema-runtime.ts";
+import { vocabulary } from "./spec-data.ts";
 
 const auditSchema: SchemaValidator = validateAudit;
 
@@ -77,6 +78,23 @@ function formerValuesDistinct(entry: { [key: string]: Json }): boolean {
   });
 }
 
+/**
+ * Whether an entry with evaluation.enforced names an action that may be left unenforced
+ * (SPEC-v0 sections 9.1 and 9.4): in the vocabulary of its category and not critical
+ * there. The schema cannot see the vocabulary. A category outside vocabulary v0 passes:
+ * without the vocabulary of an extension, its critical actions are unknown; the schema
+ * already requires the category and rejects a resource marked critical.
+ */
+function enforcedConsistent(entry: { [key: string]: Json }): boolean {
+  if (member(entry, "evaluation")?.enforced === undefined) return true;
+  const request = member(entry, "request");
+  const category = isObject(request?.resource) ? request.resource.category : undefined;
+  const actions = typeof category === "string" ? vocabulary[category]?.actions : undefined;
+  if (!actions) return true;
+  const action = typeof request?.action === "string" ? actions[request.action] : undefined;
+  return action !== undefined && action.critical !== true;
+}
+
 function check(text: string): { link?: Link; seq: number } {
   let value: Json;
   try {
@@ -87,7 +105,7 @@ function check(text: string): { link?: Link; seq: number } {
   }
   const seq = isObject(value) ? readableSeq(value.seq) : 0;
   if (!isObject(value) || !auditSchema(value)) return { seq };
-  if (!displayedTextValid(value) || !formerValuesDistinct(value)) return { seq };
+  if (!displayedTextValid(value) || !formerValuesDistinct(value) || !enforcedConsistent(value)) return { seq };
   let entryDigest: string;
   try {
     entryDigest = digest(value);
