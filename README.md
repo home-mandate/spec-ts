@@ -40,6 +40,18 @@ For a mandate in audit mode (`"enforce": false`), a `deny` by its rules for an a
 not critical carries `enforced: false`: the caller executes the request and records it
 (section 4.6).
 
+`verifyAudit(entries, anchor?)` and `verifyAuditLines(jsonl, anchor?)` verify an audit log
+(sections 9.4 and 9.5). An entry with `enforced: false` is checked against vocabulary v0: it is
+invalid for a critical action. For extension categories (section 5.1), pass their
+vocabularies, as JSON text in the format of `vocabulary/v0.json`:
+
+```ts
+const result = verifyAuditWith(entries, { anchor, vocabularies: [paperlessVocabulary] });
+```
+
+Without the vocabulary of an extension, the verifier cannot tell which of its actions are
+critical, and such entries pass.
+
 ### In a web browser
 
 `@home-mandate/spec/browser` (`src/browser.ts`) offers validation, digest, evaluation,

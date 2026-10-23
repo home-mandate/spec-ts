@@ -4,7 +4,9 @@ export { parseMandate, tryParseMandate, MandateError, type Mandate, type Decisio
 export { exactNumber } from "./number.ts";
 export type { ParameterValue } from "./parameters.ts";
 export { evaluate, selectAndEvaluate, isSuccessor, isCritical, type Request, type Resource, type Result, type Stored } from "./evaluate.ts";
-export { verifyAudit, verifyAuditLines, entryDigest, type Anchor, type AuditResult } from "./audit.ts";
+export {
+  verifyAudit, verifyAuditLines, verifyAuditWith, verifyAuditLinesWith, entryDigest, type Anchor, type AuditOptions, type AuditResult,
+} from "./audit.ts";
 export { parseJwks, verifySigned, verifyDetached, SignatureError, type Keys } from "./jws.ts";
 export { displayable } from "./displaytext.ts";
 export { parseJson, JsonError, type Json } from "./ijson.ts";

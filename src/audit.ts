@@ -18,6 +18,64 @@ export interface Anchor {
   logId?: string;
 }
 
+/** Options of a verification (verifyAuditWith). */
+export interface AuditOptions {
+  /** Verifies the signatures of checkpoints (SPEC-v0 section 9.5). */
+  anchor?: Anchor;
+  /**
+   * Extension vocabularies (SPEC-v0 section 5.1) as JSON text in the format of
+   * vocabulary/v0.json. With them, a deny that was not enforced for an extension category is
+   * checked as for the categories of v0; without the vocabulary of an extension, the
+   * verifier cannot tell which of its actions are critical.
+   */
+  vocabularies?: readonly string[];
+}
+
+/** Actions by category, true for a critical one; no prototype, so no inherited names. */
+type KnownActions = ReadonlyMap<string, ReadonlyMap<string, boolean>>;
+
+const V0_ACTIONS: KnownActions = new Map(
+  Object.entries(vocabulary).map(([name, c]) => [name, new Map(Object.entries(c.actions).map(([a, info]) => [a, info.critical === true]))]),
+);
+
+/** Reads the categories of an extension vocabulary; throws if it is no such file. */
+function readVocabulary(text: string, index: number): KnownActions {
+  const fail = (why: string): never => {
+    throw new Error(`audit: vocabulary ${index + 1}: ${why}`);
+  };
+  let value: Json;
+  try {
+    value = parseJson(text);
+  } catch (err) {
+    return fail(err instanceof Error ? err.message : "no JSON");
+  }
+  if (!isObject(value) || !isObject(value.categories)) return fail("no categories");
+  const out = new Map<string, ReadonlyMap<string, boolean>>();
+  for (const [name, category] of Object.entries(value.categories)) {
+    if (!isObject(category) || !isObject(category.actions)) return fail(`category ${name} has no actions`);
+    const actions = new Map<string, boolean>();
+    for (const [action, info] of Object.entries(category.actions)) {
+      if (!isObject(info) || (info.critical !== undefined && typeof info.critical !== "boolean")) return fail(`action ${name}.${action}`);
+      actions.set(action, info.critical === true);
+    }
+    out.set(name, actions);
+  }
+  return out;
+}
+
+/** Vocabulary v0 together with the extensions; an extension cannot redefine a category of v0. */
+function knownActions(extensions: readonly string[] | undefined): KnownActions {
+  if (!extensions || extensions.length === 0) return V0_ACTIONS;
+  const known = new Map(V0_ACTIONS);
+  extensions.forEach((text, i) => {
+    for (const [name, actions] of readVocabulary(text, i)) {
+      if (V0_ACTIONS.has(name)) throw new Error(`audit: vocabulary ${i + 1} redefines category ${name} of v0`);
+      known.set(name, actions);
+    }
+  });
+  return known;
+}
+
 export interface AuditResult {
   valid: boolean;
   /** seq of the first violating entry; 0 if it has no readable seq. */
@@ -81,21 +139,21 @@ function formerValuesDistinct(entry: { [key: string]: Json }): boolean {
 /**
  * Whether an entry with evaluation.enforced names an action that may be left unenforced
  * (SPEC-v0 sections 9.1 and 9.4): in the vocabulary of its category and not critical
- * there. The schema cannot see the vocabulary. A category outside vocabulary v0 passes:
- * without the vocabulary of an extension, its critical actions are unknown; the schema
- * already requires the category and rejects a resource marked critical.
+ * there. The schema cannot see the vocabulary. A category the verifier knows no
+ * vocabulary for passes: its critical actions are unknown; the schema already requires the
+ * category and rejects a resource marked critical.
  */
-function enforcedConsistent(entry: { [key: string]: Json }): boolean {
+function enforcedConsistent(entry: { [key: string]: Json }, known: KnownActions): boolean {
   if (member(entry, "evaluation")?.enforced === undefined) return true;
   const request = member(entry, "request");
   const category = isObject(request?.resource) ? request.resource.category : undefined;
-  const actions = typeof category === "string" ? vocabulary[category]?.actions : undefined;
+  const actions = typeof category === "string" ? known.get(category) : undefined;
   if (!actions) return true;
-  const action = typeof request?.action === "string" ? actions[request.action] : undefined;
-  return action !== undefined && action.critical !== true;
+  const critical = typeof request?.action === "string" ? actions.get(request.action) : undefined;
+  return critical === false;
 }
 
-function check(text: string): { link?: Link; seq: number } {
+function check(text: string, known: KnownActions): { link?: Link; seq: number } {
   let value: Json;
   try {
     if (Buffer.byteLength(text, "utf8") > MAX_ENTRY_BYTES || !text.isWellFormed()) return { seq: 0 };
@@ -105,7 +163,7 @@ function check(text: string): { link?: Link; seq: number } {
   }
   const seq = isObject(value) ? readableSeq(value.seq) : 0;
   if (!isObject(value) || !auditSchema(value)) return { seq };
-  if (!displayedTextValid(value) || !formerValuesDistinct(value) || !enforcedConsistent(value)) return { seq };
+  if (!displayedTextValid(value) || !formerValuesDistinct(value) || !enforcedConsistent(value, known)) return { seq };
   let entryDigest: string;
   try {
     entryDigest = digest(value);
@@ -123,9 +181,19 @@ function check(text: string): { link?: Link; seq: number } {
 
 /** Verifies entries in file order: schema of all entries, start, chain, checkpoints. */
 export function verifyAudit(entries: string[], anchor?: Anchor): AuditResult {
+  return verifyAuditWith(entries, anchor ? { anchor } : {});
+}
+
+/**
+ * verifyAudit with options: an anchor and extension vocabularies. Throws if a vocabulary is
+ * unreadable or redefines a category of v0.
+ */
+export function verifyAuditWith(entries: readonly string[], options: AuditOptions): AuditResult {
+  const known = knownActions(options.vocabularies);
+  const anchor = options.anchor;
   const links: Link[] = [];
   for (const text of entries) {
-    const { link, seq } = check(text);
+    const { link, seq } = check(text, known);
     if (!link) return { valid: false, brokenAt: seq, entries: 0 };
     links.push(link);
   }
@@ -162,7 +230,12 @@ export function verifyAudit(entries: string[], anchor?: Anchor): AuditResult {
 
 /** Verifies a log in the exchange format: lines are separated by line feed only. */
 export function verifyAuditLines(jsonl: string, anchor?: Anchor): AuditResult {
+  return verifyAuditLinesWith(jsonl, anchor ? { anchor } : {});
+}
+
+/** verifyAuditLines with options (verifyAuditWith). */
+export function verifyAuditLinesWith(jsonl: string, options: AuditOptions): AuditResult {
   const lines = jsonl.split("\n");
   if (lines[lines.length - 1] === "") lines.pop(); // the final line feed is optional
-  return verifyAudit(lines, anchor);
+  return verifyAuditWith(lines, options);
 }
