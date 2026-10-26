@@ -1,0 +1,2 @@
+# Supply-chain hardening: only versions published at least 7 days ago are installed.
+minimumReleaseAge: 10080
