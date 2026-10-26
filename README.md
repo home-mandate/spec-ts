@@ -7,7 +7,8 @@
 
 An independent TypeScript implementation of the [Home-Mandate Specification](https://github.com/home-mandate/spec) v0:
 validation of mandates, digests, the evaluation rule, the selection of the mandate, verification of
-audit logs with checkpoints, and signed mandates.
+audit logs with checkpoints, and signed mandates. What the specification is for, explained in plain
+words, and the list of implementations are on [home-mandate.org](https://home-mandate.org/).
 
 It exists for two reasons:
 
