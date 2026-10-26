@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/home-mandate/.github/main/profile/assets/hm-lockup-dark.svg">
+  <img src="https://raw.githubusercontent.com/home-mandate/.github/main/profile/assets/hm-lockup.svg" alt="Home-Mandate – AI is coming home. Decide what it may do." width="360">
+</picture>
+
 # Home-Mandate Specification: TypeScript implementation
 
 An independent TypeScript implementation of the [Home-Mandate Specification](https://github.com/home-mandate/spec) v0:
@@ -141,4 +146,4 @@ validators at development time.
 
 ## License
 
-Apache 2.0, see `LICENSE`.
+Apache 2.0, see `LICENSE`. The name Home-Mandate and its logo are not covered by this license.
