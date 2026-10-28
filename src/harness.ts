@@ -127,16 +127,21 @@ export function answer(m: Message): object {
   return { error: "unsupported" };
 }
 
+/** The response line to one request line, without the line feed; never throws. */
+export function respond(line: string): string {
+  let response: object;
+  try {
+    response = answer(readMessage(line));
+  } catch (e) {
+    response = { error: e instanceof Error ? e.message : "malformed request" };
+  }
+  return JSON.stringify(response);
+}
+
 if ((import.meta as { main?: boolean }).main) {
   const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
   for await (const line of lines) {
     if (line === "") continue;
-    let response: object;
-    try {
-      response = answer(readMessage(line));
-    } catch (e) {
-      response = { error: e instanceof Error ? e.message : "malformed request" };
-    }
-    process.stdout.write(JSON.stringify(response) + "\n");
+    process.stdout.write(respond(line) + "\n");
   }
 }
