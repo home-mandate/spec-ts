@@ -95,6 +95,21 @@ mandate-conformance -classes evaluator,selection,signatures,audit,audit-anchored
   -exec node src/harness.ts            # the same through the test tool of the specification
 ```
 
+`test/fuzz/` holds fuzz tests with [fast-check](https://fast-check.dev/), one per fuzz
+target of the Go reference: validation of a mandate (`parse`), the evaluation rule
+(`evaluate`), parameter values (`value`), audit logs (`audit`), signatures (`jws`) and the
+harness (`harness`). They mutate the files of the specification and check invariants
+rather than expected results.
+
+```
+pnpm fuzz                                     # every target, 10 s each
+FUZZ_TIME=120 node --test test/fuzz/evaluate.fuzz.ts     # one target, 2 minutes
+FUZZ_SEED=… FUZZ_PATH=… node --test test/fuzz/evaluate.fuzz.ts   # reproduce a failure
+```
+
+A failure prints the seed, the path and the counterexample, and writes them to
+`fuzz-failures/<target>.txt`.
+
 `src/harness.ts` implements the process binding of the test interface (SPEC-v0 section 10.2).
 Every release carries the report of that run as `conformance-report.json`, with build provenance
 (`gh attestation verify conformance-report.json --repo home-mandate/spec-ts`).
@@ -135,15 +150,17 @@ report names both.
 Changes go through a pull request from a short-lived branch (`feature/…`, `fix/…`, `ci/…`)
 against `main`, which is protected: no direct pushes, squash merge only, every required check
 green and the branch up to date. A push to a branch runs the type check and the tests
-(`ci.yml`); a pull request additionally runs the test tool of the specification
-(`integration.yml`). Nothing runs after the merge, and every merge is tagged. Independent of
-changes, `pnpm audit` runs every night (`scheduled.yml`); a failure opens an issue.
+(`ci.yml`); a pull request additionally runs the test tool of the specification and short
+fuzzing, one minute per target (`integration.yml`). Nothing runs after the merge, and every
+merge is tagged. Independent of changes, `pnpm audit` runs every night and long fuzzing,
+45 minutes per target, on the 1st and 15th of every month (`scheduled.yml`); a failure opens
+an issue.
 
 ## Requirements
 
 Node.js 24 or newer, or a current web browser for the browser entry; the sources are
 TypeScript that Node runs directly. No runtime dependencies: `ajv` generates the schema
-validators at development time.
+validators at development time, and `fast-check` generates the inputs of the fuzz tests.
 
 ## License
 
