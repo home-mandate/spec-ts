@@ -93,15 +93,36 @@ test("harness reads parameters by their exact value and reports a deny that is n
   }) as Case;
   assert.equal(denied.decision, "deny");
   assert.equal(denied.enforced, false);
+  assert.equal("confirm" in denied, false);
 });
 
-test("cases for sets of areas, parameters and audit mode are part of the files", () => {
+test("harness reports a deny that is not enforced but requires a confirmation", () => {
+  const mandate = specFile("conformance/mandates/audit-mode-ask.json");
+  const evaluate = (entity: string, category: string, action: string) => answer({
+    op: "evaluate", mandate,
+    request: { resource: { entity_id: entity, category }, action, time: "2026-10-12T12:00:00+02:00", timezone: "Europe/Berlin" },
+  });
+  assert.deepEqual(evaluate("cover.garage", "cover", "open"), {
+    decision: "deny", reason: "rule", rule_id: "r-no-garage", approval_timeout: "PT5M", approvers: ["approver-2"],
+    mandate_digest: library.tryParseMandate(mandate)!.digest, enforced: false, confirm: true,
+  });
+  const asked = evaluate("light.hall", "light", "turn_on") as Case;
+  assert.equal(asked.decision, "ask");
+  assert.equal("confirm" in asked, false);
+  const media = evaluate("media.kids_room", "media", "play") as Case;
+  assert.equal(media.enforced, false);
+  assert.equal("confirm" in media, false);
+  assert.equal("approval_timeout" in media, false);
+});
+
+test("cases for sets of areas, parameters, audit mode and confirmations are part of the files", () => {
   const ids = (path: string, key = "cases") => new Set(cases(path, key).map((c) => c.id as string));
   const expect = (set: Set<string>, prefix: string, from: number, to: number) => {
     for (let n = from; n <= to; n++) assert.ok(set.has(`${prefix}${n}`), `${prefix}${n} is missing`);
   };
-  expect(ids("conformance/cases-v0.json"), "c", 140, 192);
-  expect(ids("conformance/invalid-v0.json"), "i", 129, 148);
-  expect(ids("conformance/digest-v0.json"), "d", 41, 44);
-  expect(ids("conformance/audit-v0.json", "logs"), "a", 106, 125);
+  expect(ids("conformance/cases-v0.json"), "c", 140, 223);
+  expect(ids("conformance/invalid-v0.json"), "i", 129, 149);
+  expect(ids("conformance/digest-v0.json"), "d", 41, 48);
+  expect(ids("conformance/selection-v0.json"), "s", 20, 22);
+  expect(ids("conformance/audit-v0.json", "logs"), "a", 106, 145);
 });

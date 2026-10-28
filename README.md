@@ -44,7 +44,9 @@ agent (SPEC-v0 section 4). Parameters are integers in the units of the vocabular
 that a fraction such as `50.00000000000000000001` is never taken for an integer (section 4.5).
 For a mandate in audit mode (`"enforce": false`), a `deny` by its rules for an action that is
 not critical carries `enforced: false`: the caller executes the request and records it
-(section 4.6).
+(section 4.6). If a matching rule decides `ask`, the result also carries `confirm: true` and
+the approval settings of that `ask` in `approval`: the caller executes the request only after a
+confirmation, as an `ask` (sections 4.1 and 4.6).
 
 `verifyAudit(entries, anchor?)` and `verifyAuditLines(jsonl, anchor?)` verify an audit log
 (sections 9.4 and 9.5). An entry with `enforced: false` is checked against vocabulary v0: it is
@@ -89,7 +91,7 @@ the specification against this entry, also with code generation from strings dis
   <img src="https://raw.githubusercontent.com/home-mandate/.github/main/marks/compatible-light.svg" alt="Home-Mandate compatible" width="96" align="left">
 </picture>
 
-This implementation conforms to the Home-Mandate Specification `v0.1.0-rc.3` in the classes
+This implementation conforms to the Home-Mandate Specification `v0.1.0-rc.4` in the classes
 `evaluator`, `selection`, `signatures`, `audit` and `audit-anchored` (SPEC-v0 section 8.1),
 tested with the specification's test tool `mandate-conformance` on every pull request.
 Security problems: [SECURITY.md](SECURITY.md).
@@ -142,6 +144,7 @@ format v0 → 0.x, format v1 → 1.x. Which exact specification tag it implement
 | v0.1.0-alpha.4 | v0.1.0-alpha.4 |
 | v0.1.0-rc.1 | v0.1.0-rc.1 |
 | v0.1.0-rc.3 | v0.1.0-rc.3 |
+| v0.1.0-rc.4 | v0.1.0-rc.4 |
 
 From the specification's `v0.1.0` on, the v0 formats (mandate, audit entry, audit checkpoint)
 are frozen; an incompatible change then comes with a new format major. Reading v0 data as part

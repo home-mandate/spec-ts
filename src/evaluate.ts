@@ -47,6 +47,12 @@ export interface Result {
    * (SPEC-v0 section 4.6). The decision stays deny. Absent: the result is enforced.
    */
   enforced?: false;
+  /**
+   * true only for a deny that is not enforced while a matching rule decides ask (SPEC-v0
+   * sections 4.1 and 4.6): the PEP executes it only after a confirmation, as an ask, with
+   * the approval settings in approval. Absent: no confirmation beyond the decision.
+   */
+  confirm?: true;
 }
 
 /** Whether the areas are a set of at most 16 area identifiers without duplicates. */
@@ -120,10 +126,21 @@ export function evaluate(mandate: Mandate | null, req: Request): Result {
   if (at.ns < mandate.validFrom.ns) return deny("not_yet_valid", mandate);
   if (mandate.expires && at.ns >= mandate.expires.ns) return deny("expired", mandate);
 
-  const result = decide(mandate, mandate.rules.filter((r) => matches(r, req, local)), req);
+  const matched = mandate.rules.filter((r) => matches(r, req, local));
+  const result = decide(mandate, matched, req);
   // Audit mode (section 4.6): only a deny by the rules, never one of a critical action.
   const notEnforced = !mandate.enforce && result.decision === "deny" && !isCritical(req.resource, req.action);
-  return notEnforced ? { ...result, enforced: false } : result;
+  if (!notEnforced) return result;
+  // A deny that is not enforced keeps the confirmation a matching ask rule asks for.
+  if (matched.some((r) => r.decision === "ask")) {
+    return { ...result, enforced: false, confirm: true, approval: askApproval(mandate, matched) };
+  }
+  return { ...result, enforced: false };
+}
+
+/** The approval settings of the first matching ask rule that has its own, otherwise those of the mandate. */
+function askApproval(mandate: Mandate, matched: Rule[]): Approval {
+  return matched.find((r) => r.decision === "ask" && r.approval)?.approval ?? mandate.approval;
 }
 
 /** Steps 3 to 5 of the evaluation rule: the decision of the matching rules. */
@@ -133,7 +150,7 @@ function decide(mandate: Mandate, matched: Rule[], req: Request): Result {
   const first = matched.find((r) => r.decision === final)!;
   const result: Result = { decision: final, reason: "rule", rule_id: first.id, mandate_digest: mandate.digest };
   if (final === "ask") {
-    result.approval = matched.find((r) => r.decision === "ask" && r.approval)?.approval ?? mandate.approval;
+    result.approval = askApproval(mandate, matched);
   }
   if (final === "allow" && isCritical(req.resource, req.action)) {
     const unprotected = matched.find((r) => !r.allowCritical);
