@@ -84,6 +84,11 @@ the specification against this entry, also with code generation from strings dis
 
 ## Conformance
 
+This implementation conforms to the Home-Mandate Specification `v0.1.0-rc.3` in the classes
+`evaluator`, `selection`, `signatures`, `audit` and `audit-anchored` (SPEC-v0 section 8.1),
+tested with the specification's test tool `mandate-conformance` on every pull request.
+Security problems: [SECURITY.md](SECURITY.md).
+
 `spec/` holds the machine-readable files of the specification, copied with
 `node scripts/sync-spec.ts <path to the specification repository>`, which checks every file against the
 manifest of the specification and regenerates the schema validators in `src/generated/`; a
