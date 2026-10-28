@@ -84,10 +84,16 @@ the specification against this entry, also with code generation from strings dis
 
 ## Conformance
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/home-mandate/.github/main/marks/compatible-dark.svg">
+  <img src="https://raw.githubusercontent.com/home-mandate/.github/main/marks/compatible-light.svg" alt="Home-Mandate compatible" width="96" align="left">
+</picture>
+
 This implementation conforms to the Home-Mandate Specification `v0.1.0-rc.3` in the classes
 `evaluator`, `selection`, `signatures`, `audit` and `audit-anchored` (SPEC-v0 section 8.1),
 tested with the specification's test tool `mandate-conformance` on every pull request.
 Security problems: [SECURITY.md](SECURITY.md).
+<br clear="left">
 
 `spec/` holds the machine-readable files of the specification, copied with
 `node scripts/sync-spec.ts <path to the specification repository>`, which checks every file against the
