@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 name: Integration
 
-# The test tool of the specification against the harness, for every push into a pull
-# request against main. The tag of the Home-Mandate Specification whose files are in spec/ is "homeMandateSpec"
-# in package.json; the test tool of that tag is used. No run after the merge.
+# The test tool of the specification against the harness, and short fuzzing of every
+# target, for every push into a pull request against main. The tag of the Home-Mandate Specification whose files are in spec/ is "homeMandateSpec"
+# in package.json; the test tool of that tag is used. No run after the merge. Long fuzzing
+# runs twice a month in scheduled.yml.
 on:
   pull_request:
     branches: [main]
@@ -45,3 +46,23 @@ jobs:
           "$(go env GOPATH)/bin/mandate-conformance" -report report.json
           -classes evaluator,selection,signatures,audit,audit-anchored
           -exec node src/harness.ts
+
+  fuzz:
+    name: Fuzz (short)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 12.8.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm fuzz
+        env:
+          FUZZ_TIME: 60 # seconds per target

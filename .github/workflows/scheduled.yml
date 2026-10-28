@@ -1,12 +1,22 @@
 # SPDX-License-Identifier: Apache-2.0
 name: Scheduled
 
-# Vulnerabilities in dependencies become known without a commit: pnpm audit every night.
-# A failure opens an issue, or comments on the open one; main itself is never changed.
+# Checks that do not depend on a change: vulnerabilities in dependencies become known
+# without a commit (pnpm audit, every night), and long fuzzing finds what the short runs in
+# pull requests do not (on the 1st and 15th of every month). A failure opens an issue, or
+# comments on the open one; main itself is never changed by these runs.
 on:
   schedule:
-    - cron: "5 2 * * *"
+    - cron: "5 2 * * *" # security, every night
+    - cron: "29 3 1,15 * *" # fuzzing, twice a month
   workflow_dispatch:
+    inputs:
+      what:
+        description: "security or fuzz"
+        required: true
+        default: security
+        type: choice
+        options: [security, fuzz]
 
 permissions:
   contents: read
@@ -14,6 +24,7 @@ permissions:
 jobs:
   security:
     name: Security (pnpm audit)
+    if: github.event.schedule == '5 2 * * *' || inputs.what == 'security'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -28,9 +39,44 @@ jobs:
           node-version: 24
       - run: pnpm audit
 
+  # One job per target, 45 minutes each, side by side.
+  fuzz:
+    name: Fuzz (long, ${{ matrix.target }})
+    if: github.event.schedule == '29 3 1,15 * *' || inputs.what == 'fuzz'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [parse, evaluate, value, audit, jws, harness]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 12.8.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node --test "test/fuzz/$TARGET.fuzz.ts"
+        env:
+          TARGET: ${{ matrix.target }}
+          FUZZ_TIME: 2700 # seconds
+      # A failure is written to fuzz-failures/ with its seed and path; keep it to reproduce
+      # the failure.
+      - if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-failures-${{ matrix.target }}
+          path: fuzz-failures/
+          if-no-files-found: ignore
+
   report:
     name: Report a failure
-    needs: [security]
+    needs: [security, fuzz]
     if: failure() && github.event_name == 'schedule'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -40,7 +86,7 @@ jobs:
       - env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          TITLE: "Scheduled check failed: security"
+          TITLE: "Scheduled check failed: ${{ github.event.schedule == '5 2 * * *' && 'security' || 'fuzzing' }}"
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           number="$(gh issue list --state open --limit 100 --json number,title --jq '.[] | select(.title == env.TITLE) | .number' | head -n 1)"

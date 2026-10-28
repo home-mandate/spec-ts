@@ -12,6 +12,7 @@
   "scripts": {
     "test": "node --test test/*.test.ts && node --disallow-code-generation-from-strings --test test/browser.test.ts",
     "typecheck": "tsc --noEmit",
+    "fuzz": "node --test test/fuzz/*.fuzz.ts",
     "harness": "node src/harness.ts",
     "sync-spec": "node scripts/sync-spec.ts",
     "generate": "node scripts/generate-validators.ts"
@@ -19,6 +20,7 @@
   "devDependencies": {
     "@types/node": "24.0.0",
     "ajv": "8.20.0",
+    "fast-check": "4.10.2",
     "typescript": "5.8.3"
   }
 }
