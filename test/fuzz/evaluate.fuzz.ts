@@ -39,6 +39,9 @@ function identifier(s: string): boolean {
 }
 
 const mandates: readonly (Mandate | null)[] = [...parsedMandates, null];
+// The mandate in audit mode whose deny rules win over matching ask rules (confirm, SPEC-v0 section 4.6).
+const AUDIT_MODE_ASK = parsedMandates.findIndex((m) => m.id === "m-conf-audit-mode-ask");
+assert.ok(AUDIT_MODE_ASK >= 0, "the conformance mandate m-conf-audit-mode-ask is missing");
 
 const ACTIONS = [...new Set(Object.values(VOCABULARY).flatMap((c) => c.actions))];
 const CATEGORIES = Object.keys(VOCABULARY);
@@ -127,6 +130,7 @@ fuzz("evaluate", fc.tuple(fc.nat({ max: mandates.length - 1 }), request), ([inde
   [0, { resource: { entity_id: "x", category: "paperless:document" }, action: "*", time: "1970-01-01T00:00:00-12:00", timezone: "Local", parameters: { mode: "fan only", brightness: "fan only" } }],
   [0, { resource: { entity_id: "lock.haustuer", category: "lock", areas: "abcdefghijklmnopq".split("") }, action: "unlock", time: "2026-10-04T08:20:00+01:00" }],
   [0, { resource: { entity_id: "thermostat-1", category: "climate" }, action: "set_mode", time: "2026-10-04T08:20:00+02:00", timezone: "Europe/Berlin", parameters: { mode: "auto", brightness: "auto" } }],
+  [AUDIT_MODE_ASK, { resource: { entity_id: "cover.garage", category: "cover" }, action: "open", time: "2026-10-12T12:00:00+02:00", timezone: "Europe/Berlin" }],
 ]);
 
 function checkInvariants(mandate: Mandate | null, req: Request, got: Result): void {
@@ -136,7 +140,10 @@ function checkInvariants(mandate: Mandate | null, req: Request, got: Result): vo
   assert.ok(byRule || got.decision === "deny", `reason ${got.reason} with decision ${got.decision}: ${where}`);
   assert.ok(got.reason !== "critical_demotion" || got.decision === "ask", `critical demotion without ask: ${where}`);
   assert.equal(byRule, got.rule_id !== undefined && got.rule_id !== "", `rule id with reason ${got.reason}: ${where}`);
-  assert.equal(got.decision === "ask", got.approval !== undefined, `approval with decision ${got.decision}: ${where}`);
+  assert.equal(got.decision === "ask" || got.confirm === true, got.approval !== undefined, `approval with decision ${got.decision}: ${where}`);
+  if (got.confirm === true) {
+    assert.ok(got.enforced === false && got.reason === "rule" && got.approval !== undefined, `confirm without a deny rule that is not enforced, or without approval settings: ${where}`);
+  }
   const { known, critical } = inVocabulary(req.resource.category, req.action);
   if (mandate === null || req.revoked === true || !known) assert.equal(got.decision, "deny", `unknown or revoked input was not denied: ${where}`);
   for (const value of Object.values(req.parameters ?? {})) {
