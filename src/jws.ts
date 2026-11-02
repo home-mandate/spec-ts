@@ -10,6 +10,11 @@ import { type Mandate, tryParseMandate } from "./mandate.ts";
 export class SignatureError extends Error {}
 
 const P256_HALF_ORDER = 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551n >> 1n;
+/** p = 2^255 − 19: an Ed25519 point encoding is canonical if its y coordinate (the lower 255 bits) is less than p (RFC 8032 section 5.1.3). */
+const ED25519_FIELD_PRIME = (1n << 255n) - 19n;
+/** L, the order of the Ed25519 group: S of a signature is less than it (RFC 8032 section 5.1.7). */
+const ED25519_GROUP_ORDER = (1n << 252n) + 27742317777372353535851937790883648493n;
+const ED25519_BYTES = 32;
 const KID = /^[A-Za-z0-9._-]{1,64}$/;
 const BASE64URL = /^[A-Za-z0-9_-]*$/;
 
@@ -27,14 +32,30 @@ export function parseJwks(jwks: Json): Keys {
     if (jwk.kty === "OKP" && jwk.crv === "Ed25519") alg = "EdDSA";
     else if (jwk.kty === "EC" && jwk.crv === "P-256") alg = "ES256";
     else throw new SignatureError("unsupported key type");
+    const { kty, crv, x, y } = jwk as Record<string, string | undefined>;
+    if (typeof x !== "string" || (alg === "ES256") !== (typeof y === "string")) throw new SignatureError("invalid key");
     try {
-      const { kty, crv, x, y } = jwk as Record<string, string>;
+      const coordinates = [decode(x), ...(y === undefined ? [] : [decode(y)])];
+      if (coordinates.some((c) => c.length !== ED25519_BYTES)) throw new SignatureError("invalid key");
+      // Of the two encodings of an Ed25519 public key only the canonical one is a key.
+      if (alg === "EdDSA" && !canonicalEd25519(coordinates[0]!)) throw new SignatureError("invalid key");
       keys.set(jwk.kid, { key: createPublicKey({ key: y === undefined ? { kty, crv, x } : { kty, crv, x, y }, format: "jwk" }), alg });
     } catch {
       throw new SignatureError("invalid key");
     }
   }
   return keys;
+}
+
+/** The little-endian value of 32 bytes without the top bit: the y coordinate of an encoded Ed25519 point. */
+function canonicalEd25519(encoded: Buffer): boolean {
+  const y = Buffer.from(encoded);
+  y[ED25519_BYTES - 1]! &= 0x7f;
+  return littleEndian(y) < ED25519_FIELD_PRIME;
+}
+
+function littleEndian(bytes: Buffer): bigint {
+  return BigInt("0x" + Buffer.from(bytes).reverse().toString("hex"));
 }
 
 function decode(part: string): Buffer {
@@ -60,9 +81,11 @@ function verifyParts(head: string, payload: Buffer, signature: string, keys: Key
   if (!entry || entry.alg !== alg) throw new SignatureError("unknown key or algorithm");
   const input = Buffer.from(head + "." + payload.toString("base64url"), "ascii");
   const sig = decode(signature);
-  // ES256: of the two values of s that verify, only the lower one is accepted.
+  // A signature has exactly one form (SPEC-v0 section 7.1): for ES256, of the two values of
+  // s that verify only the lower one; for EdDSA, S below the group order and R canonical.
   const ok = alg === "EdDSA"
-    ? sig.length === 64 && cryptoVerify(null, input, entry.key, sig)
+    ? sig.length === 2 * ED25519_BYTES && canonicalEd25519(sig.subarray(0, ED25519_BYTES)) &&
+      littleEndian(sig.subarray(ED25519_BYTES)) < ED25519_GROUP_ORDER && cryptoVerify(null, input, entry.key, sig)
     : sig.length === 64 && BigInt("0x" + sig.subarray(32).toString("hex")) <= P256_HALF_ORDER &&
       cryptoVerify("sha256", input, { key: entry.key, dsaEncoding: "ieee-p1363" }, sig);
   if (!ok) throw new SignatureError("signature does not verify");
@@ -76,7 +99,12 @@ export function verifyDetached(jws: string, payload: string, keys: Keys): string
   return verifyParts(parts[0]!, Buffer.from(payload, "utf8"), parts[2]!, keys);
 }
 
-/** Verifies a signed mandate (section 7.1) against the keys trusted for an issuer. */
+/**
+ * Verifies a signed mandate (section 7.1) against the keys trusted for an issuer: a
+ * canonical payload that is a valid mandate with issuer, version, audience and expires.
+ * The caller decides whether the audience is its own and whether the issuer may issue for
+ * the principal and the agent.
+ */
 export function verifySigned(jws: string, issuer: string, keys: Keys): Mandate {
   const parts = jws.split(".");
   if (parts.length !== 3 || parts[1] === "") throw new SignatureError("not a compact JWS with payload");
@@ -93,5 +121,9 @@ export function verifySigned(jws: string, issuer: string, keys: Keys): Mandate {
   const mandate = tryParseMandate(text);
   if (!mandate) throw new SignatureError("payload is not a valid mandate");
   if (issuer === "" || mandate.issuer !== issuer) throw new SignatureError("keys are not trusted for the issuer of the mandate");
+  // A signed mandate names the verifier it is for and expires (SPEC-v0 section 7.1); whether
+  // the audience is the verifier's own is the verifier's decision, like the trust in the issuer.
+  if (mandate.audience === "") throw new SignatureError("a signed mandate names its audience");
+  if (!mandate.expires) throw new SignatureError("a signed mandate expires");
   return mandate;
 }

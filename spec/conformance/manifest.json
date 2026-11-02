@@ -3,23 +3,23 @@
   "files": [
     {
       "path": "conformance/audit-v0.json",
-      "sha256": "6f2f0ac3765d2348fb98ae57f92d16088bf758f13da2f599182207edf3fd88b9",
-      "cases": 145
+      "sha256": "3cecb3a1549958aa3c250999ba7506d59b865e3692a9fb758a698422d55b7c6c",
+      "cases": 212
     },
     {
       "path": "conformance/cases-v0.json",
-      "sha256": "f4f7ad0c1c1bb2a12e4fac114b22fec842225a85909d021df833bddfa4c3d43f",
-      "cases": 223
+      "sha256": "0c245438245f355fc3ea64fcc5e2d1d66fbe662dae9005409d9ad0b568d80931",
+      "cases": 242
     },
     {
       "path": "conformance/digest-v0.json",
-      "sha256": "4bb6d6d170d7db225696b9f1f204ccbea083b2493fd70cfd4336ecddbe6301bf",
-      "cases": 47
+      "sha256": "1d96ff3fd7aa1a3e91bde6a2c1456199fa9f7e1ca42ec0089d6a947968f012da",
+      "cases": 50
     },
     {
       "path": "conformance/invalid-v0.json",
-      "sha256": "ca8eb6fc7afb66c53a920fab3276983e195dee67cfb5498a88dc65cf63d6c8b3",
-      "cases": 149
+      "sha256": "c0e3b839d04209dd40eacea38774c03e1c56b227aaefe9c3c14bf77a1b472ed1",
+      "cases": 157
     },
     {
       "path": "conformance/keys/test-keys.json",
@@ -70,6 +70,10 @@
       "sha256": "fdcce44d9083f036162530d4feb9fb1c03942977cedd5de4ce5668d65ec12d86"
     },
     {
+      "path": "conformance/mandates/parameters.json",
+      "sha256": "00e7c177be9ed5ad91c493e1c6a40a3ac13ebf4e7ec392fcb675c019dbee0aab"
+    },
+    {
       "path": "conformance/mandates/precedence.json",
       "sha256": "974de4f61c8874ce1b368d618da59582481e8fb541c76efd8233b0e9aa2ee9ba"
     },
@@ -107,22 +111,22 @@
     },
     {
       "path": "conformance/schema/succession-v0.schema.json",
-      "sha256": "755e2a2cb35e550a0179bc143cb3029e49d84b7b89ace87b43c40fd2b49c7881"
+      "sha256": "ddffc42bd4434232541629a9bbaf61a587be93fdae8057baa0e5a76ec7f45d14"
     },
     {
       "path": "conformance/selection-v0.json",
-      "sha256": "f2aef2d6049520155f252f49183c105142b0efc9a3011eaf0ade9983a40c5e3a",
-      "cases": 22
+      "sha256": "855b28445a25df7203b7b22ed07b094ba412b54428596af4d6f0f8e3e3d246cc",
+      "cases": 28
     },
     {
       "path": "conformance/signed-v0.json",
-      "sha256": "6c6c42755753fe60c480e1c3300329ad6f7ff79fc350cf9c4f2bb2c1f41481ad",
-      "cases": 18
+      "sha256": "af6bbbcec1dbc850fa48ca321695c6fe87b796c933cd1b09905d56b0fce1ca91",
+      "cases": 23
     },
     {
       "path": "conformance/succession-v0.json",
-      "sha256": "a81da2e8146d6a268e4758941c3a823fd3109349d674450af4c62df753a10ec8",
-      "cases": 14
+      "sha256": "fa238e39a66f0d372aa226565f330a6b0a84fc3bed34cc2228e9e1b9432873fd",
+      "cases": 23
     },
     {
       "path": "data/forbidden-codepoints-v0.json",
@@ -142,19 +146,19 @@
     },
     {
       "path": "schema/audit-v0.schema.json",
-      "sha256": "f4cad73754ac02086b0588793361c3b39ead6799e4eab165f22a1ee82f31c8b2"
+      "sha256": "e980041b3c93631675be00293f036ef8e88dd7fef1d3b6d95b15a2760728287d"
     },
     {
       "path": "schema/mandate-v0.schema.json",
-      "sha256": "1a7cd5a4bf3cbcf8b5435bef0343278cc58f9c24d7915676d3a5df86cc306df6"
+      "sha256": "9f301de95dea034503c41154779103276bfbac88e4136ee7a86ec1f35ecb377e"
     },
     {
       "path": "schema/vocabulary-v0.schema.json",
-      "sha256": "d9474860a0d2559928496fe73e42d27786c9795546a2c86413ffadbc83f17791"
+      "sha256": "4643d4fae8d879ca05238de15e920e20c50c70b1fd0638ba1c0645974033805b"
     },
     {
       "path": "vocabulary/v0.json",
-      "sha256": "787380f1010583d4e64a82eba475a85394d02c592e7ceb5d233abfac0ec07ca7"
+      "sha256": "954b4dfc9ccec520c4d2c90dc55a74e8eec67790a643c1c91719904d338b3222"
     }
   ]
 }

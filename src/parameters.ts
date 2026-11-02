@@ -6,11 +6,15 @@ import { vocabulary, type VocabularyParameter } from "./spec-data.ts";
 /** The value of a parameter: an integer in the unit of the vocabulary, or a string. */
 export type ParameterValue = number | string;
 
-/** Largest number of areas of a resource and of values of a one_of (SPEC-v0 sections 3.4 and 4.5). */
+/** Largest number of areas of a resource, of values of a one_of and of parameters of a request (SPEC-v0 sections 3.4, 4 step 0 and 4.5). */
 export const MAX_AREAS = 16;
 export const MAX_ONE_OF = 32;
+export const MAX_PARAMETERS = 16;
 
 const MAX_TEXT = 64;
+
+/** The form of a parameter name (SPEC-v0 section 4, step 0). */
+const PARAMETER_NAME = /^[a-z][a-z0-9_]{0,63}$/;
 
 /** An identifier of 1 to limit printable ASCII characters without space (SPEC-v0 section 3.4). */
 export function opaque(s: unknown, limit: number): s is string {
@@ -24,6 +28,11 @@ export function integer(n: unknown): n is number {
 /** Whether a request may carry the value: an integer of magnitude at most 2^53 − 1 or a string like an area. */
 export function validValue(v: unknown): v is ParameterValue {
   return integer(v) || opaque(v, MAX_TEXT);
+}
+
+/** Whether the name is one a parameter may have, and the log can record (SPEC-v0 sections 4 step 0 and 9.1). */
+export function validParameterName(name: string): boolean {
+  return PARAMETER_NAME.test(name);
 }
 
 /**
@@ -44,16 +53,33 @@ function admits(p: VocabularyParameter, v: ParameterValue): boolean {
 }
 
 /**
- * Whether every parameter of a request that the action declares in the vocabulary has its
- * type and lies within its range or is one of its permitted values. Parameters the action
- * does not declare, and those of a category or action outside the vocabulary, are not
- * checked here.
+ * Whether the parameters of a request fit the action (SPEC-v0 section 4, step 0): every
+ * parameter is one the action declares and has its type, lies within its range or is one
+ * of its permitted values; every required parameter is present; and of the alternatives
+ * the action requires one of, exactly one is present whole and no part of another.
+ * Parameters of a category or action outside the vocabulary are not checked here; such a
+ * request is denied anyway (unknown_category, unknown_action).
  */
 export function parametersAdmitted(category: string | undefined, action: string, parameters: Readonly<Record<string, ParameterValue>>): boolean {
-  const declared = category === undefined ? undefined : vocabulary[category]?.actions[action]?.parameters;
-  if (!declared) return true;
-  return Object.entries(parameters).every(([name, value]) => {
-    const p = declared[name];
-    return p === undefined || admits(p, value);
-  });
+  const info = category === undefined ? undefined : vocabulary[category]?.actions[action];
+  if (!info) return true;
+  // The vocabulary is a copy without prototype (spec-data.ts); a name such as "toString"
+  // must not find an inherited member, so only own members count as declared.
+  const declared = info.parameters ?? {};
+  for (const [name, value] of Object.entries(parameters)) {
+    const p = Object.hasOwn(declared, name) ? declared[name] : undefined;
+    if (p === undefined || !admits(p, value)) return false;
+  }
+  for (const [name, p] of Object.entries(declared)) {
+    if (p.required === true && !Object.hasOwn(parameters, name)) return false;
+  }
+  const alternatives = info.required_one_of;
+  if (alternatives === undefined || alternatives.length === 0) return true;
+  let satisfied = 0;
+  for (const alternative of alternatives) {
+    const present = alternative.filter((name) => Object.hasOwn(parameters, name)).length;
+    if (present === alternative.length) satisfied++;
+    else if (present !== 0) return false; // a part of an alternative
+  }
+  return satisfied === 1;
 }

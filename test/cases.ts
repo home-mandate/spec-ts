@@ -12,7 +12,7 @@ import { specFile } from "../src/spec.ts";
 
 export type Case = Record<string, any>;
 
-type Library = Pick<typeof Browser, "evaluate" | "isSuccessor" | "selectAndEvaluate" | "tryParseMandate">;
+type Library = Pick<typeof Browser, "evaluate" | "isSuccessor" | "needsConfirmation" | "selectAndEvaluate" | "tryParseMandate">;
 
 // Node.js has JSON.rawJSON; the TypeScript library does not declare it yet.
 const rawJSON = (JSON as unknown as { rawJSON(text: string): unknown }).rawJSON;
@@ -89,7 +89,11 @@ export function mandateConformance(entry: string, lib: Library): void {
     for (const c of cases("conformance/succession-v0.json")) {
       const stored = lib.tryParseMandate(JSON.stringify(c.stored));
       assert.ok(stored);
-      assert.equal(lib.isSuccessor(stored, lib.tryParseMandate(JSON.stringify(c.offered))), c.expected === "accept", `${c.id}: ${c.why}`);
+      const offered = lib.tryParseMandate(JSON.stringify(c.offered));
+      assert.equal(lib.isSuccessor(stored, offered), c.expected === "accept", `${c.id}: ${c.why}`);
+      if (c.expected === "accept") {
+        assert.equal(lib.needsConfirmation(stored, c.stored_revoked === true, offered), c.confirm === true, `${c.id}: ${c.why}`);
+      }
     }
   });
 }

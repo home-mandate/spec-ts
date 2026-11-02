@@ -8,16 +8,16 @@
 // cases of the specification against it.
 export {
   parseMandate, tryParseMandate, MandateError, timeoutSeconds,
-  type Mandate, type Rule, type Decision, type Approval, type Constraint,
+  type Mandate, type Rule, type RuleText, type Decision, type Approval, type Constraint,
 } from "./mandate.ts";
 export { exactNumber } from "./number.ts";
 export type { ParameterValue } from "./parameters.ts";
 export {
-  evaluate, selectAndEvaluate, isSuccessor, isCritical,
+  evaluate, selectAndEvaluate, validSubject, isSuccessor, needsConfirmation, narrows, entersAuditMode, isCritical,
   type Request, type Resource, type Result, type Stored,
 } from "./evaluate.ts";
 export {
-  vocabulary,
+  vocabulary, vocabularyId, vocabularyVersion,
   type Vocabulary, type VocabularyCategory, type VocabularyAction, type VocabularyParameter,
 } from "./spec-data.ts";
 export { displayable } from "./displaytext.ts";
