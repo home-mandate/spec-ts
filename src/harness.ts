@@ -6,7 +6,7 @@
 import { readFileSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { entryDigest, verifyAudit, verifyAuditLines, type Anchor } from "./audit.ts";
-import { evaluate, isSuccessor, selectAndEvaluate, type Request, type Result } from "./evaluate.ts";
+import { evaluate, isSuccessor, needsConfirmation, selectAndEvaluate, type Request, type Result } from "./evaluate.ts";
 import { type Json } from "./ijson.ts";
 import { parseJwks, verifySigned } from "./jws.ts";
 import { tryParseMandate } from "./mandate.ts";
@@ -23,6 +23,7 @@ interface Message {
   subject?: { client_id: string; principal: string };
   request?: Request;
   stored?: string;
+  stored_revoked?: boolean;
   offered?: string;
   jws?: string;
   issuer?: string;
@@ -37,7 +38,7 @@ interface Message {
 // so that a former member name (such as "area") is never evaluated as if it were absent.
 // keys is a JWK Set and not checked here.
 const MEMBERS: Readonly<Record<string, readonly string[]>> = {
-  message: ["op", "id", "mandate", "mandates", "subject", "request", "stored", "offered", "jws", "issuer", "keys", "jsonl", "entries", "log_id", "entry"],
+  message: ["op", "id", "mandate", "mandates", "subject", "request", "stored", "stored_revoked", "offered", "jws", "issuer", "keys", "jsonl", "entries", "log_id", "entry"],
   stored: ["mandate", "revoked"],
   subject: ["client_id", "principal"],
   request: ["resource", "action", "parameters", "time", "timezone", "revoked"],
@@ -101,7 +102,11 @@ export function answer(m: Message): object {
     case "succession": {
       const stored = tryParseMandate(m.stored ?? "");
       if (!stored) return { error: "stored mandate is invalid" };
-      return { accept: isSuccessor(stored, tryParseMandate(m.offered ?? "")) };
+      const offered = tryParseMandate(m.offered ?? "");
+      if (!isSuccessor(stored, offered)) return { accept: false };
+      // Accepted is not in effect (SPEC-v0 section 3.5): a weakening, a revoked predecessor
+      // or audit mode switched on need a human's confirmation first.
+      return needsConfirmation(stored, m.stored_revoked === true, offered) ? { accept: true, confirm: true } : { accept: true };
     }
     case "verify_signed":
       try {

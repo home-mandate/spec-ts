@@ -20,7 +20,7 @@ It exists for two reasons:
 - **Use in JavaScript and TypeScript**, for example to check a mandate in a user interface
   before it is stored, also in a web browser (see below).
 
-Status: draft, like the specification. Not published to a registry yet.
+Status: implements the released specification `v0.1.0`, whose v0 formats are frozen (SPEC-v0 section 14). Not published to a registry yet.
 
 ## Use
 
@@ -48,8 +48,23 @@ not critical carries `enforced: false`: the caller executes the request and reco
 the approval settings of that `ask` in `approval`: the caller executes the request only after a
 confirmation, as an `ask` (sections 4.1 and 4.6).
 
+A request carries exactly the parameters its action declares (section 4, step 0): one the
+action does not declare, a missing required parameter (`mode` of `alarm.arm`) and none or
+more than one of the alternatives it requires one of (`climate.set_temperature`) yield
+`invalid_request`. `selectAndEvaluate(stored, clientId, principal, request)` selects the
+mandate among the stored documents (section 4.3): a subject no mandate could name is
+`invalid_request`, an agent whose only mandates are revoked is `revoked`, and an invalid
+stored document is a candidate that denies. `isSuccessor(stored, offered)` is the succession
+rule (section 3.5) and `needsConfirmation(stored, storedRevoked, offered)` says whether an
+accepted successor takes effect only after a human confirmed it: it switches audit mode on,
+follows a revoked mandate, or does not merely narrow the stored one (`narrows`).
+
+`verifySigned(jws, issuer, keys)` verifies a signed mandate (section 7.1): canonical payload,
+`alg` matching the key, canonical EdDSA encodings, and a mandate with `issuer`, `version`,
+`audience` and `expires`. Whether the `audience` is the verifier's own is the caller's check.
+
 `verifyAudit(entries, anchor?)` and `verifyAuditLines(jsonl, anchor?)` verify an audit log
-(sections 9.4 and 9.5). An entry with `enforced: false` is checked against vocabulary v0: it is
+(sections 9.4 and 9.5), the time of a checkpoint in its signed payload included. An entry with `enforced: false` is checked against vocabulary v0: it is
 invalid for a critical action. For extension categories (section 5.1), pass their
 vocabularies, as JSON text in the format of `vocabulary/v0.json`:
 
@@ -91,7 +106,7 @@ the specification against this entry, also with code generation from strings dis
   <img src="https://raw.githubusercontent.com/home-mandate/.github/main/marks/compatible-light.svg" alt="Home-Mandate compatible" width="96" align="left">
 </picture>
 
-This implementation conforms to the Home-Mandate Specification `v0.1.0-rc.4` in the classes
+This implementation conforms to the Home-Mandate Specification `v0.1.0` in the classes
 `evaluator`, `selection`, `signatures`, `audit` and `audit-anchored` (SPEC-v0 section 8.1),
 tested with the specification's test tool `mandate-conformance` on every pull request.
 Security problems: [SECURITY.md](SECURITY.md).
@@ -145,9 +160,10 @@ format v0 → 0.x, format v1 → 1.x. Which exact specification tag it implement
 | v0.1.0-rc.1 | v0.1.0-rc.1 |
 | v0.1.0-rc.3 | v0.1.0-rc.3 |
 | v0.1.0-rc.4 | v0.1.0-rc.4 |
+| v0.1.0 | v0.1.0 |
 
-From the specification's `v0.1.0` on, the v0 formats (mandate, audit entry, audit checkpoint)
-are frozen; an incompatible change then comes with a new format major. Reading v0 data as part
+Since the specification's `v0.1.0`, the v0 formats (mandate, audit entry, audit checkpoint)
+are frozen; an incompatible change comes with a new format major. Reading v0 data as part
 of v1 (older audit entries in the same log, mandates moved to v1 by succession) is only added
 here once a v1 format exists.
 

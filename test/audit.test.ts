@@ -4,7 +4,7 @@
 // sections 3.1 item 8 and 9.1), for the members template and approver.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { verifyAudit, type Json } from "../src/index.ts";
+import { verifyAudit, verifyAuditLines, type Json } from "../src/index.ts";
 
 const DIGEST_A = "sha256:4e56112f4919687e886c67e4efc6d5f28913eef6454b9f48a60cd9a8bfb49a8d";
 const DIGEST_B = "sha256:15f1c3f5496649fe6ee684324810fb1f22a70b2e85f6a8ea580b92ca756783e5";
@@ -138,4 +138,14 @@ test("a confirmed action that was not executed is a failure with its code", () =
   for (const error of ["outcome_unknown", "already_in_state", "state_changed"]) {
     assert.equal(verifyAudit([decision({ outcome: "approved", by: "user-1", via: "push" }, { status: "failed", error })]).valid, true, error);
   }
+});
+
+// The exchange format (SPEC-v0 section 9.4): a carriage return before the line feed is white
+// space around the value; the line without it is the entry, which is at most 65 536 bytes.
+test("a carriage return before the line feed is not part of the entry", () => {
+  const first = template({ previous_digest: DIGEST_B });
+  assert.equal(verifyAuditLines(first + "\r\n").valid, true);
+  const padded = first + " ".repeat(65_536 - Buffer.byteLength(first)) + "\r\n";
+  assert.equal(verifyAuditLines(padded).valid, true, "65 536 bytes without the line ending");
+  assert.deepEqual(verifyAuditLines(" " + padded), { valid: false, brokenAt: 0, entries: 0 }, "65 537 bytes");
 });

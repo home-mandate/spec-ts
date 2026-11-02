@@ -76,11 +76,32 @@ test("an unreadable vocabulary or one that redefines a category of v0 is refused
     JSON.stringify({ categories: [] }),
     JSON.stringify({ categories: { "x:y": { actions: [] } } }),
     JSON.stringify({ categories: { "x:y": { actions: { a: { critical: "yes" } } } } }),
-    JSON.stringify({ categories: { lock: { actions: { unlock: {} } } } }),
+    JSON.stringify({ id: "https://example.org/vocabulary/x", categories: { lock: { actions: { unlock: {} } } } }),
+    JSON.stringify({ categories: { "x:y": { actions: { a: {} } } } }), // without an id, the vocabulary a decision names cannot be checked
     JSON.stringify({ categories: { "x:y": { actions: {} } } }) + JSON.stringify({}),
   ]) {
     assert.throws(() => verifyAuditWith([], { vocabularies: [vocabulary] }), Error, vocabulary);
   }
+});
+
+/** A decision entry that names the vocabulary its evaluation used (SPEC-v0 section 9.1). */
+function named(category: string, id: string): string {
+  const entry = JSON.parse(unenforced(category, "read")) as Record<string, unknown>;
+  entry.evaluation = { decision: "allow", reason: "rule", rule_id: "r-1" };
+  entry.vocabulary = { id, version: "1" };
+  return JSON.stringify(entry);
+}
+
+test("the vocabulary a decision names fits the category of its resource", () => {
+  const v0 = "https://home-mandate.org/vocabulary/v0";
+  const paperless = "https://example.org/vocabulary/paperless";
+  assert.equal(verifyAudit([named("switch", v0)]).valid, true);
+  assert.equal(verifyAudit([named("switch", paperless)]).valid, false, "a category of v0 belongs to v0");
+  assert.equal(verifyAudit([named("paperless:document", paperless)]).valid, true, "an unknown extension names any id but v0");
+  assert.equal(verifyAudit([named("paperless:document", v0)]).valid, false, "v0 defines no extension category");
+  const options = { vocabularies: [PAPERLESS] };
+  assert.equal(verifyAuditWith([named("paperless:document", paperless)], options).valid, true);
+  assert.equal(verifyAuditWith([named("paperless:document", "https://example.org/other")], options).valid, false, "a known extension has one id");
 });
 
 test("a category named like a member of Object.prototype is no category", () => {

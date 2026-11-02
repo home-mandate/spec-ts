@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// The evaluation rule (SPEC-v0 section 4) and the selection of the mandate (4.3).
+// The evaluation rule (SPEC-v0 section 4), the selection of the mandate (4.3) and the
+// succession of versions (3.5).
 import type { Approval, Decision, Mandate, Rule } from "./mandate.ts";
 import { tryParseMandate } from "./mandate.ts";
 import { parseJson, isObject } from "./ijson.ts";
-import { MAX_AREAS, opaque, type ParameterValue, parametersAdmitted, validValue } from "./parameters.ts";
+import { MAX_AREAS, MAX_PARAMETERS, opaque, type ParameterValue, parametersAdmitted, validParameterName, validValue } from "./parameters.ts";
 import { vocabulary } from "./spec-data.ts";
 import { type Instant, type LocalTime, localTime, parseTimestamp } from "./time.ts";
 
@@ -27,7 +28,10 @@ export interface Request {
   /**
    * Parameters of the action (SPEC-v0 section 4.5): integers in the units of the
    * vocabulary, or strings. Whoever reads them from JSON text reads numbers by their exact
-   * value (exactNumber), so that a fraction is never rounded to an integer.
+   * value (exactNumber), so that a fraction is never rounded to an integer. A request
+   * carries exactly the parameters its action declares: one the action does not declare,
+   * a missing required one, and none or more than one of the alternatives the action
+   * requires one of make it invalid (section 4, step 0).
    */
   parameters?: Readonly<Record<string, ParameterValue>>;
   time: string;
@@ -62,11 +66,19 @@ function validAreas(areas: unknown): boolean {
   return areas.every((area, i) => opaque(area, 64) && areas.indexOf(area) === i);
 }
 
-/** Whether the parameters are values a request may carry, of the types and ranges the vocabulary declares. */
+/**
+ * Whether the parameters are ones a request may carry (SPEC-v0 section 4, step 0): at
+ * most 16, names of the form the log can record, values of the permitted types, and
+ * fitting the action of the vocabulary: declared, of the declared type, range and values,
+ * the required ones present.
+ */
 function validParameters(req: Request): boolean {
   const parameters = req.parameters ?? {};
-  if (typeof parameters !== "object" || parameters === null) return false;
-  return Object.values(parameters).every(validValue) && parametersAdmitted(req.resource.category, req.action, parameters);
+  if (typeof parameters !== "object" || parameters === null || Array.isArray(parameters)) return false;
+  const entries = Object.entries(parameters);
+  if (entries.length > MAX_PARAMETERS) return false;
+  if (!entries.every(([name, value]) => validParameterName(name) && validValue(value))) return false;
+  return parametersAdmitted(req.resource.category, req.action, parameters);
 }
 
 const STRICTNESS: Record<Decision, number> = { allow: 0, ask: 1, deny: 2 };
@@ -166,31 +178,33 @@ export interface Stored {
   revoked?: boolean;
 }
 
-/** Selects the mandate of an agent and a principal among the stored ones and evaluates. */
-export function selectAndEvaluate(stored: Stored[], clientId: string, principal: string, req: Request): { selected: Mandate | null; result: Result } {
-  const at = typeof req.time === "string" ? parseTimestamp(req.time) : null;
-  const candidates: (Mandate | null)[] = [];
-  for (const s of stored) {
-    if (s.revoked) continue;
-    const mandate = tryParseMandate(s.mandate);
-    if (mandate) {
-      if (mandate.clientId === clientId && mandate.principal === principal) candidates.push(mandate);
-      continue;
-    }
-    // An invalid document stays a candidate if it names the agent and the principal, or
-    // if not even that can be read.
-    const named = looseSubject(s.mandate);
-    if (!named || (named.clientId === clientId && named.principal === principal)) candidates.push(null);
-  }
-  const current = candidates.filter(
-    (m) => m === null || (at !== null && at.ns >= m.validFrom.ns && (!m.expires || at.ns < m.expires.ns)),
-  );
-  let selected: Mandate | null;
-  if (current.length === 1) selected = current[0]!;
-  else if (current.length > 1) return { selected: null, result: deny("ambiguous_mandate") };
-  else if (candidates.length === 1) selected = candidates[0]!;
-  else return { selected: null, result: deny("no_mandate") };
-  return { selected, result: evaluate(selected, { ...req, revoked: false }) };
+/** The pattern of principal in the mandate schema. */
+const PRINCIPAL = /^(household|person):[A-Za-z0-9_-]{1,64}$/;
+
+/**
+ * Whether a request names its subject in a form a mandate could name: a non-empty client
+ * ID and a principal that matches the pattern of the schema. A request that does not is
+ * deny with invalid_request before any mandate is selected (SPEC-v0 sections 4.3 and 6).
+ */
+export function validSubject(clientId: string, principal: string): boolean {
+  return typeof clientId === "string" && clientId !== "" && typeof principal === "string" && PRINCIPAL.test(principal);
+}
+
+/** A stored document as the selection sees it: the mandate, or null if the document is not a valid one. */
+interface Document {
+  mandate: Mandate | null;
+  revoked: boolean;
+}
+
+/**
+ * Whether the stored document concerns the agent and principal (SPEC-v0 section 4.3 step
+ * 1): a valid mandate by its members; an invalid document by what can be read of them,
+ * or every agent and principal if not even that can be read, so that it is never ignored.
+ */
+function concerns(s: Stored, mandate: Mandate | null, clientId: string, principal: string): boolean {
+  if (mandate) return mandate.clientId === clientId && mandate.principal === principal;
+  const named = looseSubject(s.mandate);
+  return !named || (named.clientId === clientId && named.principal === principal);
 }
 
 function looseSubject(text: string): { clientId: string; principal: string } | null {
@@ -205,10 +219,107 @@ function looseSubject(text: string): { clientId: string; principal: string } | n
   return null;
 }
 
+/**
+ * The answer of a selection without candidates (SPEC-v0 section 4.3 step 2): no_mandate,
+ * unless revoked documents are stored for the agent and principal, which are not evaluated
+ * but shown: revoked, naming the mandate if it is exactly one valid one.
+ */
+function revokedOnly(revoked: Document[]): { selected: Mandate | null; result: Result } {
+  if (revoked.length === 0) return { selected: null, result: deny("no_mandate") };
+  const only = revoked.length === 1 ? revoked[0]!.mandate : null;
+  return only ? { selected: only, result: deny("revoked", only) } : { selected: null, result: deny("revoked") };
+}
+
+/**
+ * Selects the mandate of an agent and a principal among the stored ones and evaluates
+ * (SPEC-v0 section 4.3). Revoked mandates are never evaluated: without any other
+ * candidate they yield revoked instead of no_mandate, with the mandate if it is exactly one.
+ */
+export function selectAndEvaluate(stored: Stored[], clientId: string, principal: string, req: Request): { selected: Mandate | null; result: Result } {
+  if (!validSubject(clientId, principal)) return { selected: null, result: deny("invalid_request") };
+  const at = typeof req.time === "string" ? parseTimestamp(req.time) : null;
+  const documents: Document[] = [];
+  for (const s of stored) {
+    const mandate = tryParseMandate(s.mandate);
+    if (concerns(s, mandate, clientId, principal)) documents.push({ mandate, revoked: s.revoked === true });
+  }
+  const candidates = documents.filter((d) => !d.revoked).map((d) => d.mandate);
+  const current = candidates.filter(
+    (m) => m === null || (at !== null && at.ns >= m.validFrom.ns && (!m.expires || at.ns < m.expires.ns)),
+  );
+  let selected: Mandate | null;
+  if (current.length === 1) selected = current[0]!;
+  else if (current.length > 1) return { selected: null, result: deny("ambiguous_mandate") };
+  else if (candidates.length === 1) selected = candidates[0]!;
+  else if (candidates.length === 0) return revokedOnly(documents.filter((d) => d.revoked));
+  else return { selected: null, result: deny("no_mandate") };
+  return { selected, result: evaluate(selected, { ...req, revoked: false }) };
+}
+
 /** Succession (SPEC-v0 section 3.5): may offered replace stored? */
 export function isSuccessor(stored: Mandate, offered: Mandate | null): boolean {
   if (!offered || offered.id !== stored.id) return false;
   if (offered.clientId !== stored.clientId || offered.principal !== stored.principal) return false;
   if (stored.version === 0) return true;
   return offered.issuer === stored.issuer && offered.version > stored.version;
+}
+
+/**
+ * Whether offered differs from stored only in ways that take nothing away from the
+ * household's protection (SPEC-v0 section 3.5): removed allow rules, added deny rules,
+ * added ask rules without their own approval, an earlier or added expiry, a later start, a
+ * lower rate limit, audit mode switched off, and the issuer's version. Everything else, a
+ * changed rule or displayed text included, is a weakening. Rules are compared as wholes.
+ */
+export function narrows(stored: Mandate, offered: Mandate): boolean {
+  if (stored.id !== offered.id || stored.clientId !== offered.clientId || stored.principal !== offered.principal) return false;
+  if ((!offered.enforce && stored.enforce) || offered.name !== stored.name || offered.displayName !== stored.displayName ||
+    offered.audience !== stored.audience || offered.approvalText !== stored.approvalText ||
+    offered.maxActions > stored.maxActions || offered.validFrom.ns < stored.validFrom.ns) {
+    return false;
+  }
+  if (stored.expires && (!offered.expires || offered.expires.ns > stored.expires.ns)) return false;
+  const kept = new Map(stored.ruleTexts.map((r) => [r.text, false]));
+  for (const r of offered.ruleTexts) {
+    if (kept.has(r.text)) {
+      kept.set(r.text, true);
+      continue;
+    }
+    if (r.decision !== "deny" && !(r.decision === "ask" && !r.ownApproval)) return false; // an added or changed allow rule, or an ask rule that names approvers
+  }
+  return stored.ruleTexts.every((r) => kept.get(r.text) || r.decision === "allow"); // a removed or changed deny or ask rule weakens
+}
+
+/**
+ * Whether the stored mandate is in force: not revoked, and valid at the point in time if
+ * one is given (SPEC-v0 section 4, step 1); without one, only valid and active.
+ */
+function inForce(stored: Mandate | null, storedRevoked: boolean, at: Instant | undefined): stored is Mandate {
+  if (stored === null || storedRevoked) return false;
+  return at === undefined || (at.ns >= stored.validFrom.ns && (!stored.expires || at.ns < stored.expires.ns));
+}
+
+/**
+ * Whether adopting offered switches audit mode on (SPEC-v0 sections 3.5 and 11.6): it is in
+ * audit mode and no mandate in audit mode is in force for it. stored is the mandate held
+ * under the same id, null if none; a predecessor that is revoked, expired or not yet valid
+ * at the point in time counts as none, so offered arrives as if from outside.
+ */
+export function entersAuditMode(stored: Mandate | null, storedRevoked: boolean, offered: Mandate, at?: Instant): boolean {
+  if (offered.enforce) return false;
+  return !inForce(stored, storedRevoked, at) || stored.enforce;
+}
+
+/**
+ * Whether an accepted successor takes effect only after a human confirmed exactly this
+ * version (SPEC-v0 sections 3.5 and 11.6): it switches audit mode on, its predecessor is
+ * revoked (the issuer cannot undo a revocation of the household), or it does not merely
+ * narrow the stored mandate. Whether the approvers of a signed mandate are known to the
+ * implementation is the caller's check.
+ */
+export function needsConfirmation(stored: Mandate | null, storedRevoked: boolean, offered: Mandate | null, at?: Instant): boolean {
+  if (!offered) return false;
+  if (entersAuditMode(stored, storedRevoked, offered, at)) return true;
+  if (!stored) return false;
+  return storedRevoked || !narrows(stored, offered);
 }

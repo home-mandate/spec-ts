@@ -3,7 +3,7 @@
 // Validity of a mandate (SPEC-v0 section 3.1) and its digest (section 3.2).
 import { displayable } from "./displaytext.ts";
 import { isObject, type Json, JsonError, parseJson, utf8Length } from "./ijson.ts";
-import { digest } from "./jcs.ts";
+import { canonicalize, digest } from "./jcs.ts";
 import { declares, MAX_ONE_OF, type ParameterValue, validValue } from "./parameters.ts";
 import { validateMandate } from "./generated/mandate-validator.ts";
 import { describeViolation, type SchemaValidator } from "./schema-runtime.ts";
@@ -47,6 +47,14 @@ export interface Rule {
   allowCritical: boolean;
 }
 
+/** What a rule is for the comparison of two versions (SPEC-v0 section 3.5): its canonical text, as a whole. */
+export interface RuleText {
+  text: string;
+  decision: Decision;
+  /** The rule names its own approval settings. */
+  ownApproval: boolean;
+}
+
 export interface Mandate {
   id: string;
   digest: string;
@@ -55,6 +63,18 @@ export interface Mandate {
   issuer: string;
   /** 0 if the mandate has no version. */
   version: number;
+  /** The verifier the mandate is for (SPEC-v0 section 3.5); "" if it names none. */
+  audience: string;
+  /** Displayed name of the mandate (SPEC-v0 section 3.1); "" if it has none. */
+  name: string;
+  /** agent.display_name, the name every confirmation shows. */
+  displayName: string;
+  /** limits.max_actions_per_hour; 0 if the mandate names none. */
+  maxActions: number;
+  /** Canonical text of approval, for the comparison of two versions (SPEC-v0 section 3.5). */
+  approvalText: string;
+  /** The rules as wholes, in document order (SPEC-v0 section 3.5). */
+  ruleTexts: readonly RuleText[];
   /** false for a mandate in audit mode ("enforce": false, SPEC-v0 section 4.6). */
   enforce: boolean;
   validFrom: Instant;
@@ -131,6 +151,7 @@ function clock(text: string): number {
 
 function rule(raw: { [key: string]: Json }): Rule {
   const id = raw.id as string;
+  if (typeof raw.note === "string" && !displayable(raw.note)) fail(`rule ${id}: note not displayable`);
   const resource = raw.resource as Rule["resource"];
   const actions = raw.actions as string[];
   const category = resource.category;
@@ -184,14 +205,22 @@ export function parseMandate(text: string): Mandate {
   if (expires && expires.ns <= validFrom.ns) fail("expires must be after valid_from");
   const agent = value.agent as { client_id: string; display_name: string };
   if (!displayable(agent.display_name) || !displayable(value.created_by as string)) fail("text not displayable");
+  if (typeof value.name === "string" && !displayable(value.name)) fail("name not displayable");
   const rules = (value.rules as { [key: string]: Json }[]).map(rule);
   if (new Set(rules.map((r) => r.id)).size !== rules.length) fail("duplicate rule id");
   let mandateDigest: string;
+  let approvalText: string;
+  let ruleTexts: RuleText[];
   try {
     mandateDigest = digest(value);
+    approvalText = canonicalize(value.approval!);
+    ruleTexts = (value.rules as { [key: string]: Json }[]).map((r) => ({
+      text: canonicalize(r), decision: r.decision as Decision, ownApproval: r.approval !== undefined,
+    }));
   } catch {
     fail("cannot be canonicalized");
   }
+  const limits = isObject(value.limits) ? value.limits : undefined;
   return {
     id: value.id as string,
     digest: mandateDigest,
@@ -199,6 +228,12 @@ export function parseMandate(text: string): Mandate {
     principal: value.principal as string,
     issuer: (value.issuer as string | undefined) ?? "",
     version: (value.version as number | undefined) ?? 0,
+    audience: (value.audience as string | undefined) ?? "",
+    name: (value.name as string | undefined) ?? "",
+    displayName: agent.display_name,
+    maxActions: typeof limits?.max_actions_per_hour === "number" ? limits.max_actions_per_hour : 0,
+    approvalText,
+    ruleTexts,
     enforce: value.enforce !== false,
     validFrom, expires, rules,
     approval: approval(value.approval!, "approval"),

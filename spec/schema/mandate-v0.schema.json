@@ -10,6 +10,10 @@
   "properties": {
     "type": { "const": "https://home-mandate.org/mandate/v0" },
     "id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{4,64}$" },
+    "name": {
+      "description": "Optional name of the mandate for user interfaces and confirmations; displayed text (SPEC-v0 section 3.1 item 8), not part of the evaluation.",
+      "type": "string", "minLength": 1, "maxLength": 64
+    },
     "principal": { "type": "string", "pattern": "^(household|person):[A-Za-z0-9_-]{1,64}$" },
     "agent": {
       "type": "object",
@@ -51,6 +55,10 @@
       "description": "Who issued the mandate; only together with version. Required in a signed mandate (SPEC-v0 sections 3.5 and 7).",
       "$ref": "#/$defs/uri"
     },
+    "audience": {
+      "description": "The verifier the mandate is for, as the issuer knows it; the same form as agent.client_id. Required in a signed mandate; a verifier accepts a signed mandate only for its own audience (SPEC-v0 sections 3.5 and 7.1).",
+      "$ref": "#/$defs/uri"
+    },
     "version": {
       "description": "Version of the mandate with this id, increasing with every change; only together with issuer.",
       "type": "integer",
@@ -82,7 +90,7 @@
     "category": {
       "anyOf": [
         { "enum": ["light", "switch", "climate", "cover", "gate", "lock", "alarm", "camera", "media", "sensor", "scene", "script", "other"] },
-        { "type": "string", "pattern": "^[a-z][a-z0-9_-]*:[a-z][a-z0-9_]*$", "description": "Namespaced extension, e.g. paperless:document" }
+        { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,31}:[a-z][a-z0-9_]{0,31}$", "description": "Namespaced extension, e.g. paperless:document; each part at most 32 characters, as in a vocabulary file" }
       ]
     },
     "resource": {
@@ -109,7 +117,7 @@
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
-          "items": { "type": "string", "minLength": 1, "maxLength": 64 }
+          "items": { "type": "string", "minLength": 1, "maxLength": 128 }
         }
       }
     },
@@ -192,6 +200,10 @@
           "items": { "type": "string", "pattern": "^(\\*|[a-z][a-z0-9_]{0,63})$" }
         },
         "decision": { "enum": ["allow", "ask", "deny"] },
+        "note": {
+          "description": "Optional explanation of the rule for user interfaces and confirmations (by which rule); displayed text (SPEC-v0 section 3.1 item 8), not part of the evaluation.",
+          "type": "string", "minLength": 1, "maxLength": 200
+        },
         "conditions": { "$ref": "#/$defs/conditions" },
         "constraints": { "$ref": "#/$defs/constraints" },
         "approval": { "$ref": "#/$defs/approval" },

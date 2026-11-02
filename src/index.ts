@@ -1,14 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 
-export { parseMandate, tryParseMandate, MandateError, type Mandate, type Decision, type Approval, type Constraint } from "./mandate.ts";
+export { parseMandate, tryParseMandate, MandateError, type Mandate, type Rule, type RuleText, type Decision, type Approval, type Constraint } from "./mandate.ts";
 export { exactNumber } from "./number.ts";
 export type { ParameterValue } from "./parameters.ts";
-export { evaluate, selectAndEvaluate, isSuccessor, isCritical, type Request, type Resource, type Result, type Stored } from "./evaluate.ts";
+export {
+  evaluate, selectAndEvaluate, validSubject, isSuccessor, needsConfirmation, narrows, entersAuditMode, isCritical,
+  type Request, type Resource, type Result, type Stored,
+} from "./evaluate.ts";
 export {
   verifyAudit, verifyAuditLines, verifyAuditWith, verifyAuditLinesWith, entryDigest, type Anchor, type AuditOptions, type AuditResult,
 } from "./audit.ts";
 export { parseJwks, verifySigned, verifyDetached, SignatureError, type Keys } from "./jws.ts";
 export { displayable } from "./displaytext.ts";
 export { parseJson, JsonError, type Json } from "./ijson.ts";
-export { vocabulary, type Vocabulary, type VocabularyCategory, type VocabularyAction, type VocabularyParameter } from "./spec-data.ts";
+export {
+  vocabulary, vocabularyId, vocabularyVersion, type Vocabulary, type VocabularyCategory, type VocabularyAction, type VocabularyParameter,
+} from "./spec-data.ts";
 export { canonicalize, digest } from "./jcs.ts";

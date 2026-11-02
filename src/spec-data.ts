@@ -15,6 +15,8 @@ export interface VocabularyParameter {
   minimum?: number;
   maximum?: number;
   values?: readonly string[];
+  /** A request of the action carries the parameter (SPEC-v0 sections 4.5 and 5). */
+  required?: boolean;
   description?: string;
 }
 
@@ -22,6 +24,8 @@ export interface VocabularyAction {
   /** Critical actions are demoted from allow to ask (SPEC-v0 section 4.1). */
   critical?: boolean;
   parameters?: Readonly<Record<string, Readonly<VocabularyParameter>>>;
+  /** Alternatives of which a request carries exactly one, each a set of parameter names (SPEC-v0 section 4.5). */
+  required_one_of?: readonly (readonly string[])[];
 }
 
 export interface VocabularyCategory {
@@ -49,5 +53,9 @@ function frozenCopy(value: unknown): unknown {
 }
 
 export const vocabulary: Vocabulary = frozenCopy(vocabularyFile.categories) as Vocabulary;
+
+/** The id of vocabulary v0 and the version of the file (SPEC-v0 section 5), as a decision entry names them. */
+export const vocabularyId: string = vocabularyFile.id;
+export const vocabularyVersion: string = vocabularyFile.version;
 
 export const codepoints: Codepoints = frozenCopy(codepointFile) as Codepoints;
