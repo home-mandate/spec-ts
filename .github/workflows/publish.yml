@@ -98,16 +98,6 @@ jobs:
         with:
           name: package
 
-      # A trusted publisher can be set up only for a package that exists, so the very first
-      # version needs a token. Remove this step once the trusted publisher is in place.
-      - name: Use the token for the first version
-        env:
-          NPM_FIRST_PUBLISH_TOKEN: ${{ secrets.NPM_FIRST_PUBLISH_TOKEN }}
-        run: |
-          if [ -n "$NPM_FIRST_PUBLISH_TOKEN" ]; then
-            npm config set --location=user "//registry.npmjs.org/:_authToken" "$NPM_FIRST_PUBLISH_TOKEN"
-          fi
-
       - name: Publish the tested tarball
         env:
           TAG: ${{ github.ref_name }}
