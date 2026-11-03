@@ -20,7 +20,15 @@ It exists for two reasons:
 - **Use in JavaScript and TypeScript**, for example to check a mandate in a user interface
   before it is stored, also in a web browser (see below).
 
-Status: implements the released specification `v0.1.0`, whose v0 formats are frozen (SPEC-v0 section 14). Not published to a registry yet.
+Status: implements the released specification `v0.1.0`, whose v0 formats are frozen (SPEC-v0 section 14).
+
+## Install
+
+```
+npm install @home-mandate/spec
+```
+
+The package is compiled JavaScript with type declarations and has no runtime dependencies.
 
 ## Use
 
@@ -161,6 +169,7 @@ format v0 → 0.x, format v1 → 1.x. Which exact specification tag it implement
 | v0.1.0-rc.3 | v0.1.0-rc.3 |
 | v0.1.0-rc.4 | v0.1.0-rc.4 |
 | v0.1.0 | v0.1.0 |
+| v0.1.1 (first version on npm) | v0.1.0 |
 
 Since the specification's `v0.1.0`, the v0 formats (mandate, audit entry, audit checkpoint)
 are frozen; an incompatible change comes with a new format major. Reading v0 data as part
@@ -182,14 +191,17 @@ against `main`, which is protected: no direct pushes, squash merge only, every r
 green and the branch up to date. A push to a branch runs the type check and the tests
 (`ci.yml`); a pull request additionally runs the test tool of the specification and short
 fuzzing, one minute per target (`integration.yml`). Nothing runs after the merge, and every
-merge is tagged. Independent of changes, `pnpm audit` runs every night and long fuzzing,
+merge is tagged. Publishing a release builds and tests the package and publishes that tarball to
+npm with provenance (`publish.yml`); `node scripts/install-package.ts <directory>` installs the
+package the same way locally. Independent of changes, `pnpm audit` runs every night and long fuzzing,
 45 minutes per target, on the 1st and 15th of every month (`scheduled.yml`); a failure opens
 an issue.
 
 ## Requirements
 
-Node.js 24 or newer, or a current web browser for the browser entry; the sources are
-TypeScript that Node runs directly. No runtime dependencies: `ajv` generates the schema
+Node.js 24 or newer, or a current web browser for the browser entry. In this repository the
+sources are TypeScript that Node runs directly; the package holds them compiled, because Node
+does not run TypeScript under `node_modules`. No runtime dependencies: `ajv` generates the schema
 validators at development time, and `fast-check` generates the inputs of the fuzz tests.
 
 ## License

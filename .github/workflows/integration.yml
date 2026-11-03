@@ -46,6 +46,12 @@ jobs:
           "$(go env GOPATH)/bin/mandate-conformance" -report report.json
           -classes evaluator,selection,signatures,audit,audit-anchored
           -exec node src/harness.ts
+      - name: The same against the package, as a user installs it
+        run: |
+          node scripts/install-package.ts "$RUNNER_TEMP/consumer"
+          "$(go env GOPATH)/bin/mandate-conformance" -report "$RUNNER_TEMP/report.json" \
+            -classes evaluator,selection,signatures,audit,audit-anchored \
+            -exec "$RUNNER_TEMP/consumer/node_modules/.bin/mandate-harness-ts"
 
   fuzz:
     name: Fuzz (short)
