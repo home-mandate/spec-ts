@@ -12,7 +12,7 @@ export {
 } from "./audit.ts";
 export { parseJwks, verifySigned, verifyDetached, SignatureError, type Keys } from "./jws.ts";
 export { displayable } from "./displaytext.ts";
-export { parseJson, JsonError, type Json } from "./ijson.ts";
+export { parseJson, parseRecorded, JsonError, type Json } from "./ijson.ts";
 export {
   vocabulary, vocabularyId, vocabularyVersion, type Vocabulary, type VocabularyCategory, type VocabularyAction, type VocabularyParameter,
 } from "./spec-data.ts";

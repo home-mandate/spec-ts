@@ -13,7 +13,8 @@ function denotesInteger(text: string): boolean {
   const fraction = m[2] ?? "";
   const digits = (m[1]! + fraction).replace(/^0+/, "");
   if (digits === "") return true;
-  const trailingZeros = digits.length - digits.replace(/0+$/, "").length;
+  let trailingZeros = 0;
+  while (digits[digits.length - 1 - trailingZeros] === "0") trailingZeros++;
   // value = digits × 10^(exponent − length of fraction); trailing zeros move into the
   // exponent. An exponent too long for a double is ±Infinity, which compares correctly.
   return Number(m[3] ?? 0) + trailingZeros - fraction.length >= 0;
