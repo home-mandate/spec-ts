@@ -33,7 +33,7 @@ after(() => {
 test("the package holds the compiled code and the data it reads, and nothing else", () => {
   const names = execFileSync("tar", ["tzf", installed.tarball], { encoding: "utf8" }).trim().split("\n").map((name) => relative("package", name));
   const unexpected = names.filter((name) =>
-    !["LICENSE", "README.md", "package.json", "spec/data/forbidden-codepoints-v0.json", "spec/vocabulary/v0.json"].includes(name) &&
+    !["LICENSE", "README.md", "package.json", "spec/data/corrections-v0.json", "spec/data/forbidden-codepoints-v0.json", "spec/vocabulary/v0.json"].includes(name) &&
     !/^dist\/.+\.(?:js|d\.ts)$/.test(name));
   assert.deepEqual(unexpected, []);
   assert.ok(names.includes("dist/index.js"));

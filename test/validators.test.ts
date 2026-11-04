@@ -31,10 +31,11 @@ function example(change: (m: Record<string, unknown>) => void): Record<string, u
 test("format date-time is asserted with the library's own timestamp check", () => {
   const validator: SchemaValidator = validateMandate;
   assert.equal(validator(example(() => {})), true);
-  for (const timestamp of ["2016-12-31T23:59:60Z", "2026-02-30T00:00:00Z", "2026-01-01T24:00:00Z"]) {
+  for (const timestamp of ["2026-02-30T00:00:00Z", "2026-01-01T24:00:00Z"]) {
     assert.equal(validator(example((m) => (m.valid_from = timestamp))), false, timestamp);
     assert.equal(validator.errors?.[0]?.keyword, "format", timestamp);
   }
+  assert.equal(validator(example((m) => (m.valid_from = "2016-12-31T23:59:60Z"))), false, "the pattern excludes a leap second");
 });
 
 test("a schema violation names where it is", () => {
