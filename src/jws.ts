@@ -16,6 +16,23 @@ const ED25519_FIELD_PRIME = (1n << 255n) - 19n;
 const ED25519_GROUP_ORDER = (1n << 252n) + 27742317777372353535851937790883648493n;
 const ED25519_BYTES = 32;
 const KID = /^[A-Za-z0-9._-]{1,64}$/;
+/**
+ * The encodings of the Ed25519 points of small order (SPEC-v0 section 7.1). With such a key
+ * a signature verifies for every message of a class, so anyone could sign in the name of
+ * its holder. Whether a crypto library refuses them depends on its version.
+ */
+const SMALL_ORDER = new Set([
+  "0100000000000000000000000000000000000000000000000000000000000000",
+  "0100000000000000000000000000000000000000000000000000000000000080",
+  "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+  "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "0000000000000000000000000000000000000000000000000000000000000000",
+  "0000000000000000000000000000000000000000000000000000000000000080",
+  "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05",
+  "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc85",
+  "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a",
+  "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa",
+]);
 const BASE64URL = /^[A-Za-z0-9_-]*$/;
 
 export type Keys = Map<string, { key: KeyObject; alg: "EdDSA" | "ES256" }>;
@@ -38,13 +55,21 @@ export function parseJwks(jwks: Json): Keys {
       const coordinates = [decode(x), ...(y === undefined ? [] : [decode(y)])];
       if (coordinates.some((c) => c.length !== ED25519_BYTES)) throw new SignatureError("invalid key");
       // Of the two encodings of an Ed25519 public key only the canonical one is a key.
-      if (alg === "EdDSA" && !canonicalEd25519(coordinates[0]!)) throw new SignatureError("invalid key");
+      if (alg === "EdDSA" && !usableEd25519(coordinates[0]!)) throw new SignatureError("invalid key");
       keys.set(jwk.kid, { key: createPublicKey({ key: y === undefined ? { kty, crv, x } : { kty, crv, x, y }, format: "jwk" }), alg });
     } catch {
       throw new SignatureError("invalid key");
     }
   }
   return keys;
+}
+
+export function smallOrderEd25519(encoded: Buffer): boolean {
+  return SMALL_ORDER.has(encoded.toString("hex"));
+}
+
+function usableEd25519(encoded: Buffer): boolean {
+  return canonicalEd25519(encoded) && !smallOrderEd25519(encoded);
 }
 
 /** The little-endian value of 32 bytes without the top bit: the y coordinate of an encoded Ed25519 point. */
@@ -63,6 +88,12 @@ function decode(part: string): Buffer {
   const bytes = Buffer.from(part, "base64url");
   if (bytes.toString("base64url") !== part) throw new SignatureError("not canonical base64url");
   return bytes;
+}
+
+/** A key can come from a Keys map built without parseJwks, so it is checked here as well. */
+function usableKey(key: KeyObject): boolean {
+  const { x } = key.export({ format: "jwk" });
+  return typeof x === "string" && usableEd25519(Buffer.from(x, "base64url"));
 }
 
 /** Checks the signature over head.payload and returns the key ID. */
@@ -84,7 +115,7 @@ function verifyParts(head: string, payload: Buffer, signature: string, keys: Key
   // A signature has exactly one form (SPEC-v0 section 7.1): for ES256, of the two values of
   // s that verify only the lower one; for EdDSA, S below the group order and R canonical.
   const ok = alg === "EdDSA"
-    ? sig.length === 2 * ED25519_BYTES && canonicalEd25519(sig.subarray(0, ED25519_BYTES)) &&
+    ? usableKey(entry.key) && sig.length === 2 * ED25519_BYTES && canonicalEd25519(sig.subarray(0, ED25519_BYTES)) &&
       littleEndian(sig.subarray(ED25519_BYTES)) < ED25519_GROUP_ORDER && cryptoVerify(null, input, entry.key, sig)
     : sig.length === 64 && BigInt("0x" + sig.subarray(32).toString("hex")) <= P256_HALF_ORDER &&
       cryptoVerify("sha256", input, { key: entry.key, dsaEncoding: "ieee-p1363" }, sig);

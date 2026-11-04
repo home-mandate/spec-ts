@@ -16,7 +16,14 @@ mandateConformance("node entry", library);
 
 test("signed mandates", () => {
   for (const c of cases("conformance/signed-v0.json")) {
-    const keys = parseJwks(JSON.parse(specFile(c.keys)) as Json);
+    // A key set with a key that cannot be used verifies nothing (SPEC-v0 section 10.2).
+    let keys;
+    try {
+      keys = parseJwks(JSON.parse(specFile(c.keys)) as Json);
+    } catch {
+      assert.equal(c.expected, "invalid", `${c.id}: ${c.why}`);
+      continue;
+    }
     if (c.expected === "valid") assert.equal(verifySigned(c.jws, c.issuer, keys).digest, c.digest, c.why);
     else assert.throws(() => verifySigned(c.jws, c.issuer, keys), `${c.id}: ${c.why}`);
   }

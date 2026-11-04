@@ -3,9 +3,10 @@
 // Signed mandates (SPEC-v0 section 7.1): what a signed mandate carries, and that a key and
 // a signature have exactly one form. The conformance cases cover the rest.
 import assert from "node:assert/strict";
-import { generateKeyPairSync, sign } from "node:crypto";
+import { createPublicKey, generateKeyPairSync, sign } from "node:crypto";
 import { test } from "node:test";
-import { canonicalize, type Json, parseJwks, SignatureError, verifySigned } from "../src/index.ts";
+import { canonicalize, type Json, parseJwks, SignatureError, verifyDetached, verifySigned } from "../src/index.ts";
+import { smallOrderEd25519 } from "../src/jws.ts";
 import { specFile } from "../src/spec.ts";
 
 const ISSUER = "https://issuer.example/mandates";
@@ -60,4 +61,37 @@ test("an EdDSA signature whose S is not below the group order does not verify", 
   }
   const forged = `${head}.${payload}.${Buffer.concat([sig.subarray(0, 32), bytes]).toString("base64url")}`;
   assert.throws(() => verifySigned(forged, ISSUER, parseJwks(KEYS)), SignatureError);
+});
+
+const SMALL_ORDER = [
+  "0100000000000000000000000000000000000000000000000000000000000000",
+  "0100000000000000000000000000000000000000000000000000000000000080",
+  "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+  "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "0000000000000000000000000000000000000000000000000000000000000000",
+  "0000000000000000000000000000000000000000000000000000000000000080",
+  "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05",
+  "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc85",
+  "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a",
+  "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa",
+];
+
+test("an Ed25519 key of small order is no key, by our own check and not only the library's (SPEC-v0 section 7.1)", () => {
+  for (const hex of SMALL_ORDER) {
+    const x = Buffer.from(hex, "hex").toString("base64url");
+    assert.throws(() => parseJwks({ keys: [{ kty: "OKP", crv: "Ed25519", kid: "k", x }] }), SignatureError, hex);
+    assert.equal(smallOrderEd25519(Buffer.from(hex, "hex")), true, hex);
+  }
+  const good = Buffer.from("11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo", "base64url");
+  assert.equal(smallOrderEd25519(good), false);
+  assert.doesNotThrow(() => parseJwks({ keys: [{ kty: "OKP", crv: "Ed25519", kid: "k", x: good.toString("base64url") }] }));
+});
+
+test("a key of small order built without a key set does not verify", () => {
+  // S = 0 and R = the identity: with the identity as key, this holds for every message.
+  const hex = SMALL_ORDER[0]!;
+  const key = createPublicKey({ key: { kty: "OKP", crv: "Ed25519", x: Buffer.from(hex, "hex").toString("base64url") }, format: "jwk" });
+  const head = Buffer.from('{"alg":"EdDSA","kid":"k"}').toString("base64url");
+  const signature = Buffer.concat([Buffer.from(hex, "hex"), Buffer.alloc(32)]).toString("base64url");
+  assert.throws(() => verifyDetached(`${head}..${signature}`, "any payload", new Map([["k", { key, alg: "EdDSA" as const }]])), SignatureError);
 });
