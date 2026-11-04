@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import { ZONE_NAMES } from "./zones.ts";
+
 // Timestamps (SPEC-v0 section 3.1 item 0) and household local time (section 4.2).
 
 export interface Instant {
@@ -70,18 +72,19 @@ export function localTime(at: Instant, zone: string | undefined): LocalTime | nu
 
 const ZONE_PART = /^[A-Z][A-Za-z0-9_+-]*$/;
 
-// zoneKnown implements the name rule of section 4.2. Intl matches names without regard
-// to case and reports the canonical zone, so the spelling is compared here: a name that
-// differs from its canonical zone only in case is not the name of the database.
+// zoneKnown implements the name rule of section 4.2. Intl matches names without regard to
+// case, reports another canonical name for a link and knows names that left the database,
+// so the spelling is compared with the list of the database. The runtime must know the
+// zone as well.
 function zoneKnown(zone: string): boolean {
   if (zone === "UTC") return true;
   const parts = zone.split("/");
   if (zone.length > 64 || parts.length < 2 || !parts.every((p) => ZONE_PART.test(p))) return false;
-  let canonical: string;
+  if (!ZONE_NAMES.has(zone)) return false;
   try {
-    canonical = new Intl.DateTimeFormat("en-US", { timeZone: zone }).resolvedOptions().timeZone;
+    new Intl.DateTimeFormat("en-US", { timeZone: zone });
+    return true;
   } catch {
     return false;
   }
-  return canonical === zone || canonical.toLowerCase() !== zone.toLowerCase();
 }

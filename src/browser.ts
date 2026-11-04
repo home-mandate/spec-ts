@@ -22,5 +22,5 @@ export {
 } from "./spec-data.ts";
 export { displayable } from "./displaytext.ts";
 export { canonicalize, digest } from "./jcs.ts";
-export { parseJson, JsonError, type Json } from "./ijson.ts";
+export { parseJson, parseRecorded, JsonError, type Json } from "./ijson.ts";
 export type { Instant } from "./time.ts";

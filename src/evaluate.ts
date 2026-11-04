@@ -4,7 +4,7 @@
 // succession of versions (3.5).
 import type { Approval, Decision, Mandate, Rule } from "./mandate.ts";
 import { tryParseMandate } from "./mandate.ts";
-import { parseJson, isObject } from "./ijson.ts";
+import { parseRecorded, isObject } from "./ijson.ts";
 import { MAX_AREAS, MAX_PARAMETERS, opaque, type ParameterValue, parametersAdmitted, validParameterName, validValue } from "./parameters.ts";
 import { vocabulary } from "./spec-data.ts";
 import { type Instant, type LocalTime, localTime, parseTimestamp } from "./time.ts";
@@ -209,7 +209,7 @@ function concerns(s: Stored, mandate: Mandate | null, clientId: string, principa
 
 function looseSubject(text: string): { clientId: string; principal: string } | null {
   try {
-    const value = parseJson(text);
+    const value = parseRecorded(text);
     if (isObject(value) && isObject(value.agent) && typeof value.agent.client_id === "string" && typeof value.principal === "string") {
       return { clientId: value.agent.client_id, principal: value.principal };
     }

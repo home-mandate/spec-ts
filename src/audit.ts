@@ -2,7 +2,7 @@
 
 // Verification of audit logs (SPEC-v0 sections 9.4 and 9.5).
 import { displayable } from "./displaytext.ts";
-import { isObject, type Json, parseJson } from "./ijson.ts";
+import { isObject, type Json, parseRecorded } from "./ijson.ts";
 import { canonicalize, digest } from "./jcs.ts";
 import { type Keys, verifyDetached } from "./jws.ts";
 import { validateAudit } from "./generated/audit-validator.ts";
@@ -54,7 +54,7 @@ function readVocabulary(text: string, index: number): KnownActions {
   };
   let value: Json;
   try {
-    value = parseJson(text);
+    value = parseRecorded(text);
   } catch (err) {
     return fail(err instanceof Error ? err.message : "no JSON");
   }
@@ -116,7 +116,7 @@ function readableSeq(value: Json | undefined): number {
 /** Digest of one entry; throws if the entry is not I-JSON or cannot be canonicalized. */
 export function entryDigest(text: string): string {
   if (Buffer.byteLength(text, "utf8") > MAX_ENTRY_BYTES) throw new Error("entry too large");
-  return digest(parseJson(text));
+  return digest(parseRecorded(text));
 }
 
 /** Members that user interfaces show to humans: member, field (SPEC-v0 section 3.1 item 8). */
@@ -218,7 +218,7 @@ function check(text: string, known: KnownActions): { link?: Link; seq: number } 
   let value: Json;
   try {
     if (Buffer.byteLength(text, "utf8") > MAX_ENTRY_BYTES || !text.isWellFormed()) return { seq: 0 };
-    value = parseJson(text);
+    value = parseRecorded(text);
   } catch {
     return { seq: 0 };
   }
