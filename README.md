@@ -188,11 +188,11 @@ report names both.
 ## Contributing
 
 Changes go through a pull request from a short-lived branch (`feature/…`, `fix/…`, `ci/…`)
-against `main`, which is protected: no direct pushes, squash merge only, every required check
+against `main` or a release branch, which are protected: no direct pushes, squash merge only, every required check
 green and the branch up to date. A push to a branch runs the type check and the tests
 (`ci.yml`); a pull request additionally runs the test tool of the specification and short
-fuzzing, one minute per target (`integration.yml`). Nothing runs after the merge, and every
-merge is tagged. Publishing a release builds and tests the package and publishes that tarball to
+fuzzing, one minute per target (`integration.yml`). Nothing runs after the merge. Releases
+follow [RELEASING.md](RELEASING.md). Publishing a release builds and tests the package and publishes that tarball to
 npm with provenance (`publish.yml`); `node scripts/install-package.ts <directory>` installs the
 package the same way locally. Independent of changes, `pnpm audit` runs every night and long fuzzing,
 45 minutes per target, on the 1st and 15th of every month (`scheduled.yml`); a failure opens
