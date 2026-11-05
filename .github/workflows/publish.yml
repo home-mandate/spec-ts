@@ -17,8 +17,52 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Before anything reaches npm, which cannot be taken back: the tag must point to a commit on
+  # main, for a patch on release/X.Y (.github/scripts/release-base.sh), that came from a pull
+  # request into that branch whose checks all passed. Here and not in a workflow of its own:
+  # npm's trusted publisher is bound to this file, and a release has to exist first.
+  verify:
+    name: Check the tag
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read # the pull request the commit came from
+      checks: read # its checks
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the branches' history, to check where the tag points
+          persist-credentials: false
+
+      # The branches take squash-merged pull requests; their checks ran on the pull request's
+      # head.
+      - name: Where the tag stands and the pull request's checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          base=$(bash .github/scripts/release-base.sh "$TAG" "$GITHUB_SHA")
+          heads=$(gh pr list --repo "$GITHUB_REPOSITORY" --base "$base" --state merged --limit 200 \
+            --json headRefOid,mergeCommit \
+            --jq "[.[] | select(.mergeCommit.oid == \"$GITHUB_SHA\") | .headRefOid] | unique | .[]")
+          if [ "$(printf '%s\n' "$heads" | grep -c .)" != 1 ]; then
+            echo "::error::$GITHUB_SHA did not come from exactly one merged pull request into $base"; exit 1
+          fi
+          runs=$(gh api "repos/$GITHUB_REPOSITORY/commits/$heads/check-runs?per_page=100" \
+            --jq '.check_runs[] | "\(.status)|\(.conclusion)|\(.name)"')
+          printf '%s\n' "$runs"
+          for required in "Type check and tests" "Conformance (" "Fuzz ("; do
+            grep -qF "|$required" <<< "$runs" || { echo "::error::check '$required' did not run"; exit 1; }
+          done
+          if grep -vE '^completed\|(success|skipped|neutral)\|' <<< "$runs"; then
+            echo "::error::not every check of the pull request passed"; exit 1
+          fi
+
   package:
     name: Build and test the package
+    needs: verify
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
