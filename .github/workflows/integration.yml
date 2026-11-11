@@ -2,12 +2,12 @@
 name: Integration
 
 # The test tool of the specification against the harness, and short fuzzing of every
-# target, for every push into a pull request against main. The tag of the Home-Mandate Specification whose files are in spec/ is "homeMandateSpec"
+# target, for every push into a pull request against main or a release branch. The tag of the Home-Mandate Specification whose files are in spec/ is "homeMandateSpec"
 # in package.json; the test tool of that tag is used. No run after the merge. Long fuzzing
 # runs twice a month in scheduled.yml.
 on:
   pull_request:
-    branches: [main]
+    branches: [main, "release/[0-9]+.[0-9]+"]
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 

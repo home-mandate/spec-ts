@@ -1,0 +1,144 @@
+# SPDX-License-Identifier: Apache-2.0
+name: Release
+
+# A tag vX.Y.Z, vX.Y.Z-alpha.N or vX.Y.Z-rc.N publishes a GitHub release with the conformance
+# report of that commit (conformance-report.yml), then starts publish.yml, which publishes the
+# package to npm. The release is created as a draft, the report is attached to the draft, and
+# only a draft with the attested report is published. A published release is immutable
+# (repository setting), so nothing can be added or replaced afterwards; a failed run leaves a
+# draft and needs a new version.
+#
+# Guards: only admins and the maintainer may create tags and tags are immutable (repository
+# rulesets). The tag must point to a commit on main, for a patch on release/X.Y
+# (.github/scripts/release-base.sh), that came from a pull request into that branch whose
+# checks all passed (.github/scripts/pr-checks.sh), it must match the version in package.json,
+# and the release must not exist. publish.yml checks the tag again before anything reaches npm.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Check the tag
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read # the pull request the commit came from
+      checks: read # its checks
+    outputs:
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the branches' history, to check where the tag points
+          persist-credentials: false
+
+      - name: Tag, branch, version and the pull request's checks
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="$(node -p 'require("./package.json").version')"
+          if [ "v$version" != "$TAG" ]; then
+            echo "::error::version $version in package.json does not match $TAG"; exit 1
+          fi
+          base=$(bash .github/scripts/release-base.sh "$TAG" "$GITHUB_SHA")
+          bash .github/scripts/pr-checks.sh "$base" "$GITHUB_SHA" "Type check and tests" "Conformance (" "Fuzz ("
+          prerelease=false
+          if [[ "$TAG" == *-* ]]; then prerelease=true; fi
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+
+      - name: Not released yet
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "::error::release $TAG exists already"; exit 1
+          fi
+
+  release:
+    name: Create the draft
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write # the release
+    steps:
+      # A re-run of failed jobs finds the draft of the first attempt and keeps it.
+      - name: Create the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          PRERELEASE: ${{ needs.verify.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          if draft=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft -q .isDraft 2> /dev/null); then
+            [ "$draft" = true ] || { echo "::error::release $TAG is published already"; exit 1; }
+            echo "The draft of $TAG exists from an earlier attempt"; exit 0
+          fi
+          flags=()
+          if [ "$PRERELEASE" = true ]; then flags+=(--prerelease); fi
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --title "$TAG" --generate-notes "${flags[@]}"
+
+  conformance-report:
+    name: Conformance report
+    needs: release
+    permissions:
+      contents: write # the release asset
+      id-token: write # the attestation's signing certificate
+      attestations: write
+    uses: ./.github/workflows/conformance-report.yml
+    with:
+      tag: ${{ github.ref_name }}
+
+  # The gate: the draft becomes the release only with the attested report attached.
+  publish:
+    name: Publish the release
+    needs: conformance-report
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write # the release
+      attestations: read # the report's provenance
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - name: The report is attached and attested
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/assets"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$dir" --pattern 'conformance-report*.json'
+          for file in conformance-report.json; do
+            [ -f "$dir/$file" ] || { echo "::error::$file is not attached to the draft of $TAG"; exit 1; }
+            gh attestation verify "$dir/$file" --repo "$GITHUB_REPOSITORY"
+          done
+
+      - name: Publish the draft
+        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
+
+  # A release published with the workflow token starts no workflow by itself.
+  npm:
+    name: Start the npm publication
+    needs: publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: write # start publish.yml
+    steps:
+      - name: Start publish.yml on the tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: gh workflow run publish.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG"

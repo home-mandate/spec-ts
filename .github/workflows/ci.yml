@@ -6,7 +6,7 @@ name: CI
 # run after the merge. The test tool of the specification runs in integration.yml.
 on:
   push:
-    branches-ignore: [main]
+    branches-ignore: [main, "release/[0-9]+.[0-9]+"]
   workflow_dispatch:
 
 permissions:
