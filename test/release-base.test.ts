@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-// .github/scripts/release-base.sh, the guard of publish.yml that decides on which branch a tag
-// may stand (RELEASING.md).
+// .github/scripts/release-base.sh, the guard of release.yml and publish.yml that decides on
+// which branch a tag may stand (RELEASING.md).
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
