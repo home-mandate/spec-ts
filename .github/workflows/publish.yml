@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 name: Publish to npm
 
-# Publishes @home-mandate/spec when a release is published, or by hand for an existing
-# release (run this workflow on its tag). The tarball is built, packed and tested once, and
-# exactly that file is published, with provenance that names this workflow and the tag.
+# Publishes @home-mandate/spec. release.yml starts it on the tag once the GitHub release is
+# published (a release published with the workflow token starts no workflow by itself); by hand
+# only for a published release whose npm publication failed (run this workflow on its tag).
+# The tarball is built, packed and tested once, and exactly that file is published, with
+# provenance that names this workflow and the tag.
 on:
-  release:
-    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -19,8 +19,8 @@ concurrency:
 jobs:
   # Before anything reaches npm, which cannot be taken back: the tag must point to a commit on
   # main, for a patch on release/X.Y (.github/scripts/release-base.sh), that came from a pull
-  # request into that branch whose checks all passed. Here and not in a workflow of its own:
-  # npm's trusted publisher is bound to this file, and a release has to exist first.
+  # request into that branch whose checks all passed. Here too, not only in release.yml: npm's
+  # trusted publisher is bound to this file.
   verify:
     name: Check the tag
     runs-on: ubuntu-24.04
@@ -35,8 +35,6 @@ jobs:
           fetch-depth: 0 # the branches' history, to check where the tag points
           persist-credentials: false
 
-      # The branches take squash-merged pull requests; their checks ran on the pull request's
-      # head.
       - name: Where the tag stands and the pull request's checks
         env:
           GH_TOKEN: ${{ github.token }}
@@ -44,21 +42,7 @@ jobs:
         run: |
           set -euo pipefail
           base=$(bash .github/scripts/release-base.sh "$TAG" "$GITHUB_SHA")
-          heads=$(gh pr list --repo "$GITHUB_REPOSITORY" --base "$base" --state merged --limit 200 \
-            --json headRefOid,mergeCommit \
-            --jq "[.[] | select(.mergeCommit.oid == \"$GITHUB_SHA\") | .headRefOid] | unique | .[]")
-          if [ "$(printf '%s\n' "$heads" | grep -c .)" != 1 ]; then
-            echo "::error::$GITHUB_SHA did not come from exactly one merged pull request into $base"; exit 1
-          fi
-          runs=$(gh api "repos/$GITHUB_REPOSITORY/commits/$heads/check-runs?per_page=100" \
-            --jq '.check_runs[] | "\(.status)|\(.conclusion)|\(.name)"')
-          printf '%s\n' "$runs"
-          for required in "Type check and tests" "Conformance (" "Fuzz ("; do
-            grep -qF "|$required" <<< "$runs" || { echo "::error::check '$required' did not run"; exit 1; }
-          done
-          if grep -vE '^completed\|(success|skipped|neutral)\|' <<< "$runs"; then
-            echo "::error::not every check of the pull request passed"; exit 1
-          fi
+          bash .github/scripts/pr-checks.sh "$base" "$GITHUB_SHA" "Type check and tests" "Conformance (" "Fuzz ("
 
   package:
     name: Build and test the package
@@ -71,7 +55,8 @@ jobs:
       TAG: ${{ github.ref_name }}
       REF_TYPE: ${{ github.ref_type }}
     steps:
-      - name: Check the tag and the release
+      # With read access only a published release is visible, not a draft.
+      - name: Check the tag and the published release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
