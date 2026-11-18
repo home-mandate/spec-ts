@@ -36,7 +36,7 @@ test("a stored template change with a different previous digest is valid", () =>
 });
 
 test("a stored template change whose previous digest equals its digest is invalid", () => {
-  assert.deepEqual(verifyAudit([template({ previous_digest: DIGEST_A })]), { valid: false, brokenAt: 1, entries: 0 });
+  assert.deepEqual(verifyAudit([template({ previous_digest: DIGEST_A })]), { valid: false, brokenAt: 1, entries: 0, conformanceBrokenAt: 1 });
 });
 
 test("a template name that is not displayable text is invalid", () => {
@@ -67,14 +67,14 @@ test("a revoked mandate or agent is removed by a user or the system, never by an
   for (const [event, member] of [["mandate.removed", { mandate: MANDATE }], ["agent.removed", { agent: AGENT }]] as const) {
     assert.equal(verifyAudit([byActor(event, "user", member)]).valid, true, `${event} by user`);
     assert.equal(verifyAudit([byActor(event, "system", member)]).valid, true, `${event} by system`);
-    assert.deepEqual(verifyAudit([byActor(event, "agent", member)]), { valid: false, brokenAt: 1, entries: 0 }, `${event} by agent`);
+    assert.deepEqual(verifyAudit([byActor(event, "agent", member)]), { valid: false, brokenAt: 1, entries: 0, conformanceBrokenAt: 1 }, `${event} by agent`);
   }
 });
 
 test("only a user reconnects an agent", () => {
   assert.equal(verifyAudit([byActor("agent.reconnected", "user", { agent: AGENT })]).valid, true);
   for (const kind of ["system", "agent"]) {
-    assert.deepEqual(verifyAudit([byActor("agent.reconnected", kind, { agent: AGENT })]), { valid: false, brokenAt: 1, entries: 0 }, kind);
+    assert.deepEqual(verifyAudit([byActor("agent.reconnected", kind, { agent: AGENT })]), { valid: false, brokenAt: 1, entries: 0, conformanceBrokenAt: 1 }, kind);
   }
 });
 
@@ -147,5 +147,5 @@ test("a carriage return before the line feed is not part of the entry", () => {
   assert.equal(verifyAuditLines(first + "\r\n").valid, true);
   const padded = first + " ".repeat(65_536 - Buffer.byteLength(first)) + "\r\n";
   assert.equal(verifyAuditLines(padded).valid, true, "65 536 bytes without the line ending");
-  assert.deepEqual(verifyAuditLines(" " + padded), { valid: false, brokenAt: 0, entries: 0 }, "65 537 bytes");
+  assert.deepEqual(verifyAuditLines(" " + padded), { valid: false, brokenAt: 0, entries: 0, integrityBrokenAt: 0, conformanceBrokenAt: 0 }, "65 537 bytes");
 });

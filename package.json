@@ -1,7 +1,7 @@
 {
   "name": "@home-mandate/spec",
   "version": "0.1.2",
-  "homeMandateSpec": "v0.1.1",
+  "homeMandateSpec": "v0.2.0-rc.3",
   "description": "Independent TypeScript implementation of the Home-Mandate Specification v0: validation, digest, evaluation, selection, audit log verification, signatures.",
   "license": "Apache-2.0",
   "keywords": ["home-mandate", "home-automation", "ai-agents", "authorization", "mandate"],
@@ -16,7 +16,7 @@
     "./browser": { "types": "./dist/browser.d.ts", "default": "./dist/browser.js" }
   },
   "bin": { "mandate-harness-ts": "./dist/harness.js" },
-  "files": ["dist", "spec/data", "spec/vocabulary"],
+  "files": ["dist", "spec/data", "spec/vocabulary", "!spec/data/timezone-names.json"],
   "scripts": {
     "test": "node --test test/*.test.ts && node --disallow-code-generation-from-strings --test test/browser.test.ts",
     "typecheck": "tsc --noEmit",

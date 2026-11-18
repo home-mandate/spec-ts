@@ -19,7 +19,12 @@ const signedCases = cases("conformance/signed-v0.json");
 const keys = parseJwks(JSON.parse(specFile("conformance/keys/test-keys.json")) as Json);
 const privateKeys = (JSON.parse(specFile("conformance/keys/test-keys.private.json")) as { keys: Record<string, string>[] }).keys;
 
-const valid = new Set(signedCases.filter((c) => c.expected === "valid" && c.issuer === ISSUER).map((c) => c.jws as string));
+// What may verify under the test keys: the valid cases, and the signatures of cases that are
+// invalid only because of their own key set (SPEC-v0 section 7.1, g59 to g104).
+const TEST_KEYS = "conformance/keys/test-keys.json";
+const valid = new Set(
+  signedCases.filter((c) => c.issuer === ISSUER && (c.expected === "valid" || c.keys !== TEST_KEYS)).map((c) => c.jws as string),
+);
 if (valid.size === 0) throw new Error("no valid signed mandate in conformance/signed-v0.json");
 
 const b64 = (text: string) => Buffer.from(text, "utf8").toString("base64url");

@@ -15,6 +15,7 @@ const SEEDS = [
   '{"op":"evaluate","mandate":"{}","request":{"resource":{"entity_id":"a","category":"climate"},"action":"set_mode","time":"2026-10-12T19:00:00+02:00","parameters":{"mode":"heat","x":true}}}',
   '{"op":"select","mandates":[{"mandate":"x"}],"subject":{"client_id":"a","principal":"b"},"request":{"time":"x"}}',
   '{"op":"verify_audit","jsonl":"{}\\n{}","keys":{"keys":[]}}',
+  '{"op":"verify_audit","entries":["{}"],"keys":"{\\"keys\\":[]}","last_seen":{"seq":1,"digest":"sha256:00"}}',
   '{"op":"verify_signed","jws":"a.b.c","keys":{"keys":[{"kty":"OKP","crv":"Ed25519","kid":"k","x":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"}]}}',
   '{"op":"succession","stored":"{}","offered":"{}"}',
   '{"op":"entry_digest","entry":"{\\"seq\\":1}"}',

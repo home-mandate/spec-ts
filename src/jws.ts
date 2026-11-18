@@ -35,28 +35,93 @@ const SMALL_ORDER = new Set([
 ]);
 const BASE64URL = /^[A-Za-z0-9_-]*$/;
 
-export type Keys = Map<string, { key: KeyObject; alg: "EdDSA" | "ES256" }>;
+/** Keys by kid; key is null for a P-256 key whose point is not on its curve, which verifies nothing. */
+export type Keys = Map<string, { key: KeyObject | null; alg: "EdDSA" | "ES256" }>;
 
-/** Reads the public keys of a JWK Set; private keys and other key types are rejected. */
-export function parseJwks(jwks: Json): Keys {
-  if (!isObject(jwks) || !Array.isArray(jwks.keys) || jwks.keys.length === 0) throw new SignatureError("JWK Set without keys");
+/** The largest key set in bytes (SPEC-v0 section 7.1). */
+export const MAX_KEY_SET_BYTES = 64 * 1024;
+/** The largest protected header in bytes after base64url decoding (SPEC-v0 section 7.1). */
+const MAX_HEADER_BYTES = 256;
+const P256_PRIME = 0xffffffff00000001000000000000000000000000ffffffffffffffffffffffffn;
+const P256_B = 0x5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604bn;
+
+/** Whether (x, y) is a point of P-256: y² = x³ − 3x + b modulo p. */
+function onP256(x: Buffer, y: Buffer): boolean {
+  const X = BigInt("0x" + x.toString("hex"));
+  const Y = BigInt("0x" + y.toString("hex"));
+  if (X >= P256_PRIME || Y >= P256_PRIME) return false;
+  const mod = (v: bigint) => ((v % P256_PRIME) + P256_PRIME) % P256_PRIME;
+  return mod(Y * Y) === mod(X * X * X - 3n * X + P256_B);
+}
+
+/** The algorithm of SPEC-v0 section 7.1 for a key type and curve, if it is one of them. */
+function algorithmOf(kty: Json | undefined, crv: Json | undefined): "EdDSA" | "ES256" | undefined {
+  if (kty === "OKP" && crv === "Ed25519") return "EdDSA";
+  if (kty === "EC" && crv === "P-256") return "ES256";
+  return undefined;
+}
+
+/**
+ * Whether use, key_ops and alg let the key verify (SPEC-v0 section 7.1, RFC 7517 section 4):
+ * use is sig, key_ops contains verify, alg is the algorithm of the key's type (for an
+ * Ed25519 key also Ed25519, RFC 9864). A member that is null or of the wrong type fails.
+ */
+function restrictionsAllow(jwk: { [key: string]: Json }, alg: "EdDSA" | "ES256"): boolean {
+  if ("use" in jwk && jwk.use !== "sig") return false;
+  if ("key_ops" in jwk) {
+    const ops = jwk.key_ops;
+    if (!Array.isArray(ops) || !ops.every((op) => typeof op === "string") || !ops.includes("verify")) return false;
+  }
+  if ("alg" in jwk && !(jwk.alg === alg || (alg === "EdDSA" && jwk.alg === "Ed25519"))) return false;
+  return true;
+}
+
+/**
+ * Reads the public keys of a JWK Set (SPEC-v0 section 7.1 and section 14, bullet Key sets).
+ * Given as text, the set is at most 64 KiB and strict I-JSON, which only the text shows;
+ * given as a value, the caller has read it so. A key set is all or nothing: a key without a
+ * kid of the pattern, a private key, a key of another type or curve, or a key that use,
+ * key_ops or alg exclude makes the set verify nothing (SignatureError). A P-256 key whose
+ * point is not on its curve verifies nothing itself and leaves the set usable. Members a
+ * key type does not have, such as y of an Ed25519 key, are ignored (RFC 7517 section 4).
+ */
+export function parseJwks(jwks: string | Exclude<Json, string>): Keys {
+  let set: Json = jwks;
+  if (typeof jwks === "string") {
+    if (Buffer.byteLength(jwks, "utf8") > MAX_KEY_SET_BYTES) throw new SignatureError("JWK Set larger than 64 KiB");
+    try {
+      set = parseJson(jwks);
+    } catch {
+      throw new SignatureError("JWK Set is not I-JSON");
+    }
+  }
+  if (!isObject(set) || !Array.isArray(set.keys) || set.keys.length === 0) throw new SignatureError("JWK Set without keys");
   const keys: Keys = new Map();
-  for (const jwk of jwks.keys) {
+  for (const jwk of set.keys) {
     if (!isObject(jwk) || typeof jwk.kid !== "string" || !KID.test(jwk.kid)) throw new SignatureError("key without a valid kid");
     if (keys.has(jwk.kid)) throw new SignatureError("duplicate kid");
     if ("d" in jwk) throw new SignatureError("private key");
-    let alg: "EdDSA" | "ES256";
-    if (jwk.kty === "OKP" && jwk.crv === "Ed25519") alg = "EdDSA";
-    else if (jwk.kty === "EC" && jwk.crv === "P-256") alg = "ES256";
-    else throw new SignatureError("unsupported key type");
-    const { kty, crv, x, y } = jwk as Record<string, string | undefined>;
-    if (typeof x !== "string" || (alg === "ES256") !== (typeof y === "string")) throw new SignatureError("invalid key");
+    const alg = algorithmOf(jwk.kty, jwk.crv);
+    if (!alg) throw new SignatureError("unsupported key type");
+    if (!restrictionsAllow(jwk, alg)) throw new SignatureError("a key that use, key_ops or alg exclude from verifying");
+    const { x, y } = jwk;
+    if (typeof x !== "string" || (alg === "ES256" && typeof y !== "string")) throw new SignatureError("invalid key");
+    let coordinates: Buffer[];
     try {
-      const coordinates = [decode(x), ...(y === undefined ? [] : [decode(y)])];
-      if (coordinates.some((c) => c.length !== ED25519_BYTES)) throw new SignatureError("invalid key");
-      // Of the two encodings of an Ed25519 public key only the canonical one is a key.
-      if (alg === "EdDSA" && !usableEd25519(coordinates[0]!)) throw new SignatureError("invalid key");
-      keys.set(jwk.kid, { key: createPublicKey({ key: y === undefined ? { kty, crv, x } : { kty, crv, x, y }, format: "jwk" }), alg });
+      coordinates = alg === "EdDSA" ? [decode(x)] : [decode(x), decode(y as string)];
+    } catch {
+      throw new SignatureError("invalid key");
+    }
+    if (coordinates.some((c) => c.length !== ED25519_BYTES)) throw new SignatureError("invalid key");
+    // Of the two encodings of an Ed25519 public key only the canonical one is a key.
+    if (alg === "EdDSA" && !usableEd25519(coordinates[0]!)) throw new SignatureError("invalid key");
+    if (alg === "ES256" && !onP256(coordinates[0]!, coordinates[1]!)) {
+      keys.set(jwk.kid, { key: null, alg }); // verifies nothing, the set stays usable
+      continue;
+    }
+    const jwkKey = alg === "EdDSA" ? { kty: "OKP", crv: "Ed25519", x } : { kty: "EC", crv: "P-256", x, y: y as string };
+    try {
+      keys.set(jwk.kid, { key: createPublicKey({ key: jwkKey, format: "jwk" }), alg });
     } catch {
       throw new SignatureError("invalid key");
     }
@@ -91,7 +156,8 @@ function decode(part: string): Buffer {
 }
 
 /** A key can come from a Keys map built without parseJwks, so it is checked here as well. */
-function usableKey(key: KeyObject): boolean {
+function usableKey(key: KeyObject | null): key is KeyObject {
+  if (key === null) return false;
   const { x } = key.export({ format: "jwk" });
   return typeof x === "string" && usableEd25519(Buffer.from(x, "base64url"));
 }
@@ -100,7 +166,9 @@ function usableKey(key: KeyObject): boolean {
 function verifyParts(head: string, payload: Buffer, signature: string, keys: Keys): string {
   let header: Json;
   try {
-    header = parseJson(decode(head).toString("utf8"));
+    const bytes = decode(head);
+    if (bytes.length > MAX_HEADER_BYTES) throw new SignatureError("header longer than 256 bytes");
+    header = parseJson(bytes.toString("utf8"));
   } catch {
     throw new SignatureError("header");
   }
@@ -114,11 +182,15 @@ function verifyParts(head: string, payload: Buffer, signature: string, keys: Key
   const sig = decode(signature);
   // A signature has exactly one form (SPEC-v0 section 7.1): for ES256, of the two values of
   // s that verify only the lower one; for EdDSA, S below the group order and R canonical.
+  // R of small order is refused here, not left to the crypto library, whose behaviour
+  // differs between versions (SPEC-v0 section 7.1, case g49).
+  const key = entry.key;
   const ok = alg === "EdDSA"
-    ? usableKey(entry.key) && sig.length === 2 * ED25519_BYTES && canonicalEd25519(sig.subarray(0, ED25519_BYTES)) &&
-      littleEndian(sig.subarray(ED25519_BYTES)) < ED25519_GROUP_ORDER && cryptoVerify(null, input, entry.key, sig)
-    : sig.length === 64 && BigInt("0x" + sig.subarray(32).toString("hex")) <= P256_HALF_ORDER &&
-      cryptoVerify("sha256", input, { key: entry.key, dsaEncoding: "ieee-p1363" }, sig);
+    ? usableKey(key) && sig.length === 2 * ED25519_BYTES && canonicalEd25519(sig.subarray(0, ED25519_BYTES)) &&
+      !smallOrderEd25519(sig.subarray(0, ED25519_BYTES)) &&
+      littleEndian(sig.subarray(ED25519_BYTES)) < ED25519_GROUP_ORDER && cryptoVerify(null, input, key, sig)
+    : key !== null && sig.length === 64 && BigInt("0x" + sig.subarray(32).toString("hex")) <= P256_HALF_ORDER &&
+      cryptoVerify("sha256", input, { key, dsaEncoding: "ieee-p1363" }, sig);
   if (!ok) throw new SignatureError("signature does not verify");
   return kid;
 }

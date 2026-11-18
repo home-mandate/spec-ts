@@ -101,13 +101,14 @@ test("the browser entry imports no Node.js modules, no packages and compiles no 
   for (const required of ["src/mandate.ts", "src/evaluate.ts", "src/generated/mandate-validator.ts", "spec/vocabulary/v0.json"]) {
     assert.ok(files.includes(required), `${required} is part of the graph`);
   }
-  for (const nodeOnly of ["src/spec.ts", "src/jws.ts", "src/audit.ts", "src/harness.ts"]) {
+  const auditCode = ["src/audit.ts", "src/audit-rules.ts", "src/audit-checkpoint.ts", "src/generated/audit-validator.ts", "src/generated/audit-v1-validator.ts"];
+  for (const nodeOnly of ["src/spec.ts", "src/jws.ts", "src/harness.ts", ...auditCode]) {
     assert.ok(!files.includes(nodeOnly), `${nodeOnly} is not part of the graph`);
   }
 });
 
 test("the generated validators contain no code compiled at run time", () => {
-  for (const path of ["src/generated/mandate-validator.ts", "src/generated/audit-validator.ts"]) {
+  for (const path of ["src/generated/mandate-validator.ts", "src/generated/audit-validator.ts", "src/generated/audit-v1-validator.ts"]) {
     const text = readFileSync(join(ROOT, path), "utf8");
     assert.doesNotMatch(text, /\bnew Function\b|\beval\s*\(|\brequire\s*\(/, path);
   }

@@ -4,7 +4,7 @@
 // code refers to them as CommonJS modules of the ajv package; scripts/generate-validators.ts
 // replaces those references with these, so that the validators need no package at run time
 // and no code is compiled at run time (a Content Security Policy without 'unsafe-eval').
-import { validTimestamp } from "./time.ts";
+import { validDate, validTimestamp } from "./time.ts";
 
 /** Length in Unicode code points, as JSON Schema counts minLength and maxLength. */
 export function ucs2length(text: string): number {
@@ -27,9 +27,13 @@ export function equal(a: unknown, b: unknown): boolean {
   return keys.length === Object.keys(y).length && keys.every((k) => Object.hasOwn(y, k) && equal(x[k], y[k]));
 }
 
-// format date-time is asserted with our own check (SPEC-v0 section 3.1 item 0): the
-// common format libraries accept leap seconds.
-export const formats: Readonly<Record<string, (text: string) => boolean>> = Object.freeze({ "date-time": validTimestamp });
+// The formats date-time and date are asserted with our own checks (SPEC-v0 section 3.1 item
+// 0): the common format libraries accept leap seconds, and Ajv ignores a format it does not
+// know, so that a day that does not exist would pass.
+export const formats: Readonly<Record<string, (text: string) => boolean>> = Object.freeze({
+  "date-time": validTimestamp,
+  date: validDate,
+});
 
 /** An error of a generated validator, as Ajv reports it. */
 export interface SchemaError {

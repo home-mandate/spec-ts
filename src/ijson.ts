@@ -31,23 +31,49 @@ export function parseRecorded(text: string): Json {
   return parse(text, true);
 }
 
+/** An audit entry as a verifier reads it (parseAuditEntry). */
+export interface RecordedEntry {
+  value: Json;
+  /** The text has a deviation that a correction tolerates (data/corrections-v0.json): a noncharacter. */
+  corrected: boolean;
+}
+
+/**
+ * parseRecorded for an audit entry (SPEC-v0 section 9.4): it also reports whether a correction
+ * was needed, and keeps a number that is no exact value (a fraction that floating point would
+ * round to an integer, or one out of range) as NaN or ±Infinity instead of failing. Such an
+ * entry has no digest, but its other members, such as seq, can still be read.
+ */
+export function parseAuditEntry(text: string): RecordedEntry {
+  const p = new Parser(text, true, true);
+  const value = p.document();
+  return { value, corrected: p.corrected };
+}
+
 function parse(text: string, recorded: boolean): Json {
-  const p = new Parser(text, recorded);
-  p.space();
-  const value = p.value(0);
-  p.space();
-  if (p.pos !== text.length) throw new JsonError("more than one JSON value");
-  return value;
+  return new Parser(text, recorded, false).document();
 }
 
 class Parser {
   pos = 0;
+  /** A noncharacter was tolerated (only when reading what was recorded). */
+  corrected = false;
   private readonly text: string;
   private readonly recorded: boolean;
+  private readonly inexactNumbers: boolean;
 
-  constructor(text: string, recorded: boolean) {
+  constructor(text: string, recorded: boolean, inexactNumbers: boolean) {
     this.text = text;
     this.recorded = recorded;
+    this.inexactNumbers = inexactNumbers;
+  }
+
+  document(): Json {
+    this.space();
+    const value = this.value(0);
+    this.space();
+    if (this.pos !== this.text.length) throw new JsonError("more than one JSON value");
+    return value;
   }
 
   space(): void {
@@ -55,8 +81,10 @@ class Parser {
   }
 
   value(depth: number): Json {
-    if (depth > MAX_DEPTH) throw new JsonError("nesting too deep");
     const c = this.text[this.pos];
+    // depth is the number of containers around the value: a container at depth 32 would be
+    // the 33rd, deeper than 32 levels (SPEC-v0 sections 3.1 and 9.4).
+    if ((c === "{" || c === "[") && depth >= MAX_DEPTH) throw new JsonError("nesting deeper than 32");
     if (c === "{") return this.object(depth);
     if (c === "[") return this.array(depth);
     if (c === '"') return this.string();
@@ -141,7 +169,10 @@ class Parser {
       }
     }
     if (!out.isWellFormed()) throw new JsonError("lone surrogate");
-    if (!this.recorded && NONCHARACTER.test(out)) throw new JsonError("noncharacter");
+    if (NONCHARACTER.test(out)) {
+      if (!this.recorded) throw new JsonError("noncharacter");
+      this.corrected = true;
+    }
     return out;
   }
 
@@ -151,6 +182,7 @@ class Parser {
     if (!m) throw new JsonError("unexpected token");
     this.pos += m[0].length;
     const n = exactNumber(m[0]);
+    if (this.inexactNumbers) return n;
     if (Number.isNaN(n)) throw new JsonError("a fraction that floating point would round to an integer");
     if (!Number.isFinite(n)) throw new JsonError("number out of range");
     return n;

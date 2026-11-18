@@ -12,7 +12,7 @@ import { specFile } from "../src/spec.ts";
 
 export type Case = Record<string, any>;
 
-type Library = Pick<typeof Browser, "evaluate" | "isSuccessor" | "needsConfirmation" | "selectAndEvaluate" | "tryParseMandate">;
+type Library = Pick<typeof Browser, "evaluate" | "isSuccessor" | "needsConfirmation" | "selectAndEvaluate" | "tryParseMandate" | "tryParseMandateBytes">;
 
 // Node.js has JSON.rawJSON; the TypeScript library does not declare it yet.
 const rawJSON = (JSON as unknown as { rawJSON(text: string): unknown }).rawJSON;
@@ -36,6 +36,12 @@ function mandateText(c: Case): string {
   return c.mandate_raw ?? JSON.stringify(c.mandate_inline);
 }
 
+/** The mandate of a case, from its bytes where it gives them (mandate_base64). */
+function parsed(lib: Library, c: Case): Browser.Mandate | null {
+  if (c.mandate_base64 !== undefined) return lib.tryParseMandateBytes(Buffer.from(c.mandate_base64, "base64"));
+  return lib.tryParseMandate(mandateText(c));
+}
+
 /** Parameters as a harness reads them from JSON text: numbers by their exact value. */
 function parameters(given: Case | undefined): Browser.Request["parameters"] {
   if (given === undefined) return undefined;
@@ -54,25 +60,27 @@ function assertOutcome(c: Case, result: Browser.Result): void {
   assert.equal(result.approval !== undefined, result.decision === "ask" || result.confirm === true);
   assert.equal(result.enforced, c.enforced === false ? false : undefined, `${c.id}: ${c.why}`);
   assert.equal(result.confirm, c.confirm === true ? true : undefined, `${c.id}: ${c.why}`);
+  // A case without limited_rules expects none (SPEC-v0 section 4.1).
+  assert.deepEqual(result.limited_rules ?? [], c.limited_rules ?? [], `${c.id}: ${c.why}`);
 }
 
 /** Registers the tests of the evaluator and selection cases against the library. */
 export function mandateConformance(entry: string, lib: Library): void {
   test(`${entry}: evaluation cases`, () => {
     for (const c of cases("conformance/cases-v0.json")) {
-      assertOutcome(c, lib.evaluate(lib.tryParseMandate(mandateText(c)), request(c)));
+      assertOutcome(c, lib.evaluate(parsed(lib, c), request(c)));
     }
   });
 
   test(`${entry}: invalid mandates are rejected`, () => {
     for (const c of cases("conformance/invalid-v0.json")) {
-      assert.equal(lib.tryParseMandate(mandateText(c)), null, `${c.id}: ${c.why}`);
+      assert.equal(parsed(lib, c), null, `${c.id}: ${c.why}`);
     }
   });
 
   test(`${entry}: digests`, () => {
     for (const c of cases("conformance/digest-v0.json")) {
-      assert.equal(lib.tryParseMandate(mandateText(c))?.digest, c.digest, `${c.id}: ${c.why}`);
+      assert.equal(parsed(lib, c)?.digest, c.digest, `${c.id}: ${c.why}`);
     }
   });
 

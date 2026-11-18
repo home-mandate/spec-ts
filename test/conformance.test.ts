@@ -7,7 +7,9 @@ import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as library from "../src/index.ts";
-import { entryDigest, parseJwks, verifyAudit, verifyAuditLines, verifySigned, type Json } from "../src/index.ts";
+import {
+  entryDigest, parseJwks, verifyAudit, verifyAuditBytes, verifyAuditLines, verifyAuditLinesBytes, verifySigned, type Json,
+} from "../src/index.ts";
 import { answer, readMessage } from "../src/harness.ts";
 import { specFile } from "../src/spec.ts";
 import { type Case, cases, mandateConformance } from "./cases.ts";
@@ -19,7 +21,7 @@ test("signed mandates", () => {
     // A key set with a key that cannot be used verifies nothing (SPEC-v0 section 10.2).
     let keys;
     try {
-      keys = parseJwks(JSON.parse(specFile(c.keys)) as Json);
+      keys = parseJwks(specFile(c.keys));
     } catch {
       assert.equal(c.expected, "invalid", `${c.id}: ${c.why}`);
       continue;
@@ -29,19 +31,46 @@ test("signed mandates", () => {
   }
 });
 
-test("audit logs", () => {
-  // The entries are read from the file text, so that number spellings survive.
-  const text = specFile("conformance/audit-v0.json");
-  for (const c of cases("conformance/audit-v0.json", "logs")) {
-    const anchor = c.keys ? { keys: parseJwks(JSON.parse(specFile(c.keys)) as Json), logId: c.log_id } : undefined;
+/** Runs the logs of an audit conformance file: the verdict, the findings of section 9.4 and the cadence of section 9.5. */
+function auditConformance(file: string): void {
+  for (const c of cases(file, "logs")) {
+    const lastSeen = c.last_seen ? { seq: c.last_seen.seq as number, digest: c.last_seen.digest as string } : undefined;
+    const anchor = c.keys ? { keys: parseJwks(specFile(c.keys)), logId: c.log_id, lastSeen } : undefined;
     const entries: string[] = (c.entries ?? []).map((e: Json) => JSON.stringify(e));
-    const result = c.jsonl !== undefined ? verifyAuditLines(c.jsonl, anchor) : verifyAudit(entries, anchor);
-    assert.equal(result.valid, c.expected === "valid", `${c.id}: ${c.why}`);
-    if (!result.valid) assert.equal(result.brokenAt, c.broken_at, `${c.id}: ${c.why}`);
-    if (c.anchored !== undefined) assert.equal(result.anchored, c.anchored, `${c.id}: ${c.why}`);
+    const bytes = (b64: string) => Buffer.from(b64, "base64");
+    const result = c.jsonl_base64 !== undefined ? verifyAuditLinesBytes(bytes(c.jsonl_base64), anchor)
+      : c.entries_base64 !== undefined ? verifyAuditBytes(c.entries_base64.map(bytes), anchor)
+      : c.jsonl !== undefined ? verifyAuditLines(c.jsonl, anchor) : verifyAudit(entries, anchor);
+    const why = `${c.id}: ${c.why}`;
+    assert.equal(result.valid, c.expected === "valid", why);
+    if (!result.valid) assert.equal(result.brokenAt, c.broken_at, why);
+    if (c.anchored !== undefined) assert.equal(result.anchored, c.anchored, why);
+    if (c.expected === "valid" && c.jsonl === undefined && c.jsonl_base64 === undefined) {
+      assert.equal(result.entries, entries.length + (c.entries_base64?.length ?? 0), why);
+    }
+    assert.equal(result.integrityBrokenAt, c.integrity_broken_at, `${why} (integrity_broken_at)`);
+    assert.equal(result.conformanceBrokenAt, c.conformance_broken_at, `${why} (conformance_broken_at)`);
+    assert.equal(result.unknownVersionAt, c.unknown_version_at, `${why} (unknown_version_at)`);
+    if (c.expected === "valid") assert.equal(result.checkpointGapAt, c.checkpoint_gap_at, `${why} (checkpoint_gap_at)`);
     (c.entry_digests ?? []).forEach((d: string, i: number) => assert.equal(entryDigest(entries[i]!), d));
   }
-  assert.ok(text.includes('"seq": 1.0'), "the number spelling cases are part of the file");
+}
+
+test("audit logs of version 0", () => {
+  auditConformance("conformance/audit-v0.json");
+  // The entries are read from the file text, so that number spellings survive.
+  assert.ok(specFile("conformance/audit-v0.json").includes('"seq": 1.0'), "the number spelling cases are part of the file");
+});
+
+test("audit logs of version 1", () => {
+  auditConformance("conformance/audit-v1.json");
+});
+
+test("the audit conformance files have cases for every finding, the cadence and the last position seen", () => {
+  const logs = [...cases("conformance/audit-v0.json", "logs"), ...cases("conformance/audit-v1.json", "logs")];
+  for (const member of ["integrity_broken_at", "conformance_broken_at", "unknown_version_at", "checkpoint_gap_at", "last_seen"]) {
+    assert.ok(logs.some((c) => c[member] !== undefined), `no case with ${member}`);
+  }
 });
 
 test("audit cases for template and approver changes are part of the file", () => {
@@ -67,7 +96,8 @@ test("harness answers every operation and rejects unknown ones", () => {
   assert.match(pkg.homeMandateSpec, /^v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/);
   assert.deepEqual(answer({ op: "dance" }), { error: "unsupported" });
   assert.deepEqual(answer({ op: "validate", mandate: "{" }), { valid: false });
-  assert.deepEqual(answer({ op: "entry_digest", entry: '{"a":1,"a":2}' }), { valid: false });
+  // An entry without a digest is answered with an error alone (SPEC-v0 section 10.2).
+  assert.deepEqual(answer({ op: "entry_digest", entry: '{"a":1,"a":2}' }), { error: "entry without a digest" });
   const example = specFile("examples/voice-assistant.json");
   const response = answer({
     op: "evaluate", mandate: example,
