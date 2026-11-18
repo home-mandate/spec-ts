@@ -2,22 +2,33 @@
 
 // Mirrors FuzzVerify of the Go audit package: verification of arbitrary entries never
 // throws, a single entry is valid only as the first entry of a log (seq 1, prev null,
-// SPEC-v0 section 9.4), and a log in the exchange format is valid only with all its lines.
+// SPEC-v0 section 9.4), a log in the exchange format is valid only with all its lines, and a
+// log is valid exactly if it has no finding.
 import assert from "node:assert/strict";
 import fc from "fast-check";
-import { entryDigest, verifyAudit, verifyAuditLines } from "../../src/audit.ts";
+import { type AuditResult, entryDigest, verifyAudit, verifyAuditLines } from "../../src/audit.ts";
 import { cases } from "../cases.ts";
 import { anyText, editedText, fuzz, jsonInput } from "./fuzz.ts";
 
-const logs = cases("conformance/audit-v0.json", "logs");
+const logs = [...cases("conformance/audit-v0.json", "logs"), ...cases("conformance/audit-v1.json", "logs")];
 const entries: string[] = logs.flatMap((c) => (c.entries ?? []).map((e: unknown) => JSON.stringify(e)));
 const jsonl: string[] = [
   ...logs.filter((c) => c.jsonl !== undefined).map((c) => c.jsonl as string),
   ...logs.filter((c) => c.entries !== undefined).map((c) => c.entries.map((e: unknown) => JSON.stringify(e)).join("\n") + "\n"),
 ];
-if (entries.length === 0 || jsonl.length === 0) throw new Error("no audit seeds in conformance/audit-v0.json");
+if (entries.length === 0 || jsonl.length === 0) throw new Error("no audit seeds in conformance/audit-v*.json");
 
-const seeds = ['{"type":"https://home-mandate.org/audit/v0","seq":1,"prev":null}', "{}", "[1,2]", ...entries];
+const seeds = [
+  '{"type":"https://home-mandate.org/audit/v0","seq":1,"prev":null}', '{"type":"https://home-mandate.org/audit/v1","seq":1,"prev":null}',
+  "{}", "[1,2]", ...entries,
+];
+
+/** A log is valid exactly if it has no finding (SPEC-v0 section 9.4), and only a valid one has a gap. */
+function findingsAgree(r: AuditResult): void {
+  const found = [r.integrityBrokenAt, r.conformanceBrokenAt, r.unknownVersionAt].filter((f) => f !== undefined);
+  assert.equal(found.length === 0, r.valid, `valid and findings disagree: ${JSON.stringify(r)}`);
+  if (!r.valid) assert.ok(r.checkpointGapAt === undefined && r.timeBackwards === undefined, `invalid log with a gap: ${JSON.stringify(r)}`);
+}
 
 const input = fc.record({
   entry: jsonInput(seeds),
@@ -26,6 +37,7 @@ const input = fc.record({
 
 fuzz("audit", input, ({ entry, log }) => {
   const single = verifyAudit([entry]);
+  findingsAgree(single);
   if (single.valid) {
     assert.equal(single.brokenAt, undefined);
     assert.equal(single.entries, 1);
@@ -43,6 +55,7 @@ fuzz("audit", input, ({ entry, log }) => {
   const lines = log.split("\n");
   if (lines.at(-1) === "") lines.pop();
   const r = verifyAuditLines(log);
+  findingsAgree(r);
   if (r.valid) assert.equal(r.entries, lines.length, `valid log with ${r.entries} of ${lines.length} lines`);
   else assert.ok(Number.isInteger(r.brokenAt) && r.entries === 0, `invalid log: ${JSON.stringify(r)}`);
 }, seeds.slice(0, 3).map((entry, i) => ({ entry, log: jsonl[i]! })));

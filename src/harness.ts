@@ -5,9 +5,11 @@
 // JSON request per line on standard input, one JSON response per line on standard output.
 import { readFileSync } from "node:fs";
 import { createInterface } from "node:readline";
-import { entryDigest, verifyAudit, verifyAuditBytes, verifyAuditLines, verifyAuditLinesBytes, type Anchor } from "./audit.ts";
+import {
+  entryDigest, verifyAudit, verifyAuditBytes, verifyAuditLines, verifyAuditLinesBytes, type Anchor, type AuditResult, type Position,
+} from "./audit.ts";
 import { evaluate, isSuccessor, needsConfirmation, selectAndEvaluate, type Request, type Result } from "./evaluate.ts";
-import { type Json } from "./ijson.ts";
+import { isObject, type Json } from "./ijson.ts";
 import { parseJwks, verifySigned } from "./jws.ts";
 import { tryParseMandate, tryParseMandateBytes, type Mandate } from "./mandate.ts";
 import { exactNumber } from "./number.ts";
@@ -49,6 +51,7 @@ const MEMBERS: Readonly<Record<string, readonly string[]>> = {
   subject: ["client_id", "principal"],
   request: ["resource", "action", "parameters", "time", "timezone", "revoked"],
   resource: ["entity_id", "category", "areas", "critical"],
+  last_seen: ["seq", "digest"],
 };
 
 // The members each operation defines besides op and id (SPEC-v0 section 10.2): a member of
@@ -77,6 +80,7 @@ export function undefinedMember(m: Message): string | undefined {
     unknownMember(m.subject, "subject") ??
     unknownMember(m.request, "request") ??
     unknownMember(m.request?.resource, "resource") ??
+    unknownMember(m.last_seen, "last_seen") ??
     (Array.isArray(m.mandates) ? m.mandates.map((s) => unknownMember(s, "stored")).find((k) => k !== undefined) : undefined);
 }
 
@@ -129,6 +133,24 @@ function outcome(r: Result): object {
   return out;
 }
 
+/** The position of last_seen (SPEC-v0 section 10.2): seq and digest; verifyAudit checks their values. */
+function position(value: Json): Position {
+  if (!isObject(value) || typeof value.seq !== "number" || typeof value.digest !== "string") throw new Error("last_seen is not a position");
+  return { seq: value.seq, digest: value.digest };
+}
+
+/** The response to verify_audit (SPEC-v0 section 10.2): the verdict and the findings of section 9.4. */
+function auditResponse(r: AuditResult): object {
+  const out: Record<string, unknown> = { valid: r.valid, entries: r.entries };
+  if (!r.valid) out.broken_at = r.brokenAt;
+  else if (r.anchored !== undefined) out.anchored = r.anchored;
+  if (r.integrityBrokenAt !== undefined) out.integrity_broken_at = r.integrityBrokenAt;
+  if (r.conformanceBrokenAt !== undefined) out.conformance_broken_at = r.conformanceBrokenAt;
+  if (r.unknownVersionAt !== undefined) out.unknown_version_at = r.unknownVersionAt;
+  if (r.valid && r.checkpointGapAt !== undefined) out.checkpoint_gap_at = r.checkpointGapAt;
+  return out;
+}
+
 export function answer(m: Message): object {
   const member = undefinedMember(m);
   if (member !== undefined) return { error: `undefined member ${member}` };
@@ -164,9 +186,13 @@ export function answer(m: Message): object {
         return { valid: false };
       }
     case "verify_audit": {
-      if (m.last_seen !== undefined) return { error: "unsupported" };
       let anchor: Anchor | undefined;
-      if (m.keys !== undefined) anchor = { keys: parseJwks(keysText(m.keys)), logId: m.log_id || undefined };
+      if (m.keys !== undefined) {
+        anchor = { keys: parseJwks(keysText(m.keys)), logId: m.log_id || undefined };
+        if (m.last_seen !== undefined) anchor.lastSeen = position(m.last_seen);
+      } else if (m.last_seen !== undefined) {
+        return { error: "last_seen without keys" };
+      }
       const forms = [m.jsonl, m.entries, m.jsonl_base64, m.entries_base64].filter((f) => f !== undefined).length;
       if (forms > 1) return { error: "more than one of jsonl, entries, jsonl_base64 and entries_base64" };
       let r;
@@ -175,10 +201,7 @@ export function answer(m: Message): object {
         if (!Array.isArray(m.entries_base64)) return { error: "entries_base64 is not an array" };
         r = verifyAuditBytes(m.entries_base64.map((e) => base64Bytes(e, "entries_base64")), anchor);
       } else r = m.jsonl !== undefined ? verifyAuditLines(m.jsonl, anchor) : verifyAudit(m.entries ?? [], anchor);
-      const out: Record<string, unknown> = { valid: r.valid, entries: r.entries };
-      if (!r.valid) out.broken_at = r.brokenAt;
-      else if (r.anchored !== undefined) out.anchored = r.anchored;
-      return out;
+      return auditResponse(r);
     }
     case "entry_digest":
       if (typeof m.entry !== "string") return { error: "missing entry" };

@@ -100,6 +100,25 @@ const result = verifyAuditWith(entries, { anchor, vocabularies: [paperlessVocabu
 Without the vocabulary of an extension, the verifier cannot tell which of its actions are
 critical, and such entries pass.
 
+The verifier reads the audit versions 0 and 1 (section 14). Besides `valid`, `brokenAt` and
+`entries`, the result carries the findings of section 9.4, each the `seq` of the first entry of
+its kind and absent if there is none; a log is valid exactly if it has none:
+
+- `integrityBrokenAt`: the log is not complete and unaltered from this entry on. Only this
+  finding means damage;
+- `conformanceBrokenAt`: an entry breaks a rule of its version, a fault of the software that
+  wrote it;
+- `unknownVersionAt`: an entry of a newer audit version than this verifier knows; show it as
+  "update the tool", never as damage.
+
+A valid log also carries `checkpointGapAt` if its writer did not keep the cadence of checkpoints
+(section 9.5), and, informatively, `timeBackwards` for the first entry recorded before the entry
+before it; neither makes the log invalid. With an anchor, a valid log carries `anchored`,
+`firstSeq` and, if its beginning was deleted, `truncationAnchored`. `anchor.lastSeen`
+(`{ seq, digest }`) is the position covered by the last checkpoint the relying party verified;
+the log must still hold it (section 9.5 condition 4). A `lastSeen` with a `seq` below 1 or a
+malformed digest throws.
+
 ### In a web browser
 
 `@home-mandate/spec/browser` (`src/browser.ts`) offers validation, digest, evaluation,

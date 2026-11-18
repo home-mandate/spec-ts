@@ -1,22 +1,29 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Verification of audit logs (SPEC-v0 sections 9.4 and 9.5).
-import { displayable } from "./displaytext.ts";
-import { isObject, type Json, parseRecorded } from "./ijson.ts";
-import { canonicalize, digest } from "./jcs.ts";
-import { type Keys, verifyDetached } from "./jws.ts";
+// Verification of audit logs (SPEC-v0 sections 9.4 and 9.5) of the audit versions 0 and 1
+// (section 14): the verdict, the findings and the cadence of checkpoints.
+import {
+  type Anchor, Cadence, checkPosition, EVENT_CHECKPOINT, EVENT_TRUNCATED, type Position, signatureVerifies,
+} from "./audit-checkpoint.ts";
+import { type Entry, keepsRules, type KnownActions, knownActions, member, readableSeq, text } from "./audit-rules.ts";
 import { validateAudit } from "./generated/audit-validator.ts";
+import { validateAuditV1 } from "./generated/audit-v1-validator.ts";
+import { isObject, type Json, parseAuditEntry, parseRecorded } from "./ijson.ts";
+import { digest } from "./jcs.ts";
 import type { SchemaValidator } from "./schema-runtime.ts";
-import { vocabulary, vocabularyId } from "./spec-data.ts";
+import { parseTimestamp } from "./time.ts";
 
-const auditSchema: SchemaValidator = validateAudit;
+export type { Anchor, Position } from "./audit-checkpoint.ts";
+
+/** The schemas of the audit versions this verifier knows, by version (SPEC-v0 section 14). */
+const SCHEMAS: readonly SchemaValidator[] = [validateAudit, validateAuditV1];
+/** The first version to which no correction applies (SPEC-v0 section 14, Correction). */
+const FIRST_STRICT_VERSION = 1;
+/** The type of an entry names a version exactly if it is this prefix and the number (SPEC-v0 section 14). */
+const TYPE_PREFIX = "https://home-mandate.org/audit/v";
+const VERSION_NUMBER = /^(0|[1-9][0-9]{0,8})$/;
 
 const MAX_ENTRY_BYTES = 64 * 1024;
-
-export interface Anchor {
-  keys: Keys;
-  logId?: string;
-}
 
 /** Options of a verification (verifyAuditWith). */
 export interface AuditOptions {
@@ -32,85 +39,72 @@ export interface AuditOptions {
   vocabularies?: readonly string[];
 }
 
-/** What the verifier knows about one category: the id of the vocabulary that defines it, and whether each action is critical. */
-interface CategoryVocabulary {
-  id: string;
-  actions: ReadonlyMap<string, boolean>;
-}
-
-/** Categories by name; no prototype, so no inherited names. */
-type KnownActions = ReadonlyMap<string, CategoryVocabulary>;
-
-const V0_ACTIONS: KnownActions = new Map(
-  Object.entries(vocabulary).map(([name, c]) => [
-    name, { id: vocabularyId, actions: new Map(Object.entries(c.actions).map(([a, info]) => [a, info.critical === true])) },
-  ]),
-);
-
-/** Reads the id and the categories of an extension vocabulary; throws if it is no such file. */
-function readVocabulary(text: string, index: number): KnownActions {
-  const fail = (why: string): never => {
-    throw new Error(`audit: vocabulary ${index + 1}: ${why}`);
-  };
-  let value: Json;
-  try {
-    value = parseRecorded(text);
-  } catch (err) {
-    return fail(err instanceof Error ? err.message : "no JSON");
-  }
-  if (!isObject(value) || !isObject(value.categories)) return fail("no categories");
-  if (typeof value.id !== "string" || value.id === "") return fail("no id");
-  const out = new Map<string, CategoryVocabulary>();
-  for (const [name, category] of Object.entries(value.categories)) {
-    if (!isObject(category) || !isObject(category.actions)) return fail(`category ${name} has no actions`);
-    const actions = new Map<string, boolean>();
-    for (const [action, info] of Object.entries(category.actions)) {
-      if (!isObject(info) || (info.critical !== undefined && typeof info.critical !== "boolean")) return fail(`action ${name}.${action}`);
-      actions.set(action, info.critical === true);
-    }
-    out.set(name, { id: value.id, actions });
-  }
-  return out;
-}
-
-/** Vocabulary v0 together with the extensions; an extension cannot redefine a category of v0. */
-function knownActions(extensions: readonly string[] | undefined): KnownActions {
-  if (!extensions || extensions.length === 0) return V0_ACTIONS;
-  const known = new Map(V0_ACTIONS);
-  extensions.forEach((text, i) => {
-    for (const [name, category] of readVocabulary(text, i)) {
-      if (V0_ACTIONS.has(name)) throw new Error(`audit: vocabulary ${i + 1} redefines category ${name} of v0`);
-      known.set(name, category);
-    }
-  });
-  return known;
-}
-
+/**
+ * The outcome of a verification (SPEC-v0 sections 9.4 and 9.5). Each finding is the seq of the
+ * first entry of its kind in file order (0 if it has no readable seq), absent if there is none;
+ * a log is valid exactly if it has no finding.
+ */
 export interface AuditResult {
   valid: boolean;
   /** seq of the first violating entry; 0 if it has no readable seq. */
   brokenAt?: number;
+  /** The number of entries of a valid log; 0 for an invalid one. */
   entries: number;
-  /** seq up to which a verified checkpoint covers the log; only with an anchor. */
+  /** seq up to which a verified checkpoint covers a valid log; only with an anchor. */
   anchored?: number;
+  /** The log is not complete and unaltered from this entry on (conditions 2, 3 and 4, an entry outside the chain). */
+  integrityBrokenAt?: number;
+  /** An entry of a known version that breaks condition 1: a fault of the software that wrote it, not damage. */
+  conformanceBrokenAt?: number;
+  /** An entry of an audit version this verifier does not know; the content from there on is not checked, the chain is. */
+  unknownVersionAt?: number;
+  /** For a valid log with a checkpoint: the first entry at which the writer did not keep the cadence (section 9.5); no finding. */
+  checkpointGapAt?: number;
+  /** For a valid log, informative: the first entry recorded before the entry before it; no finding. */
+  timeBackwards?: number;
+  /** For a valid log with entries and an anchor: the seq of its first entry, greater than 1 if the beginning was deleted. */
+  firstSeq?: number;
+  /** For a valid log with an anchor whose beginning was deleted: whether the log.truncated entry for it is anchored. */
+  truncationAnchored?: boolean;
 }
 
+/** The first entry of a kind: its position in file order and its seq. */
+interface Finding {
+  index: number;
+  at: number;
+}
+
+/** What the chain, the start, the checkpoints and the cadence need from an entry. */
 interface Link {
+  index: number;
   seq: number;
-  prev: string | null;
+  /** "" for null. */
+  prev: string;
   digest: string;
   event: string;
-  /** recorded_at as written: the signature of a checkpoint covers it (SPEC-v0 section 9.5). */
+  upToSeq: number;
+  lastDigest: string;
+  logId: string;
+  signature: string;
+  /** recorded_at as written: the signature of a checkpoint covers it. */
   recordedAt: string;
-  truncated?: { up_to_seq: number; last_digest: string };
-  checkpoint?: { log_id: string; signature: string };
+  at: bigint | null;
+  /** The audit version its type names; -1 if none. */
+  version: number;
 }
 
-type Entry = { [key: string]: Json };
+function emptyLink(index: number, seq: number): Link {
+  return {
+    index, seq, prev: "", digest: "", event: "", upToSeq: 0, lastDigest: "", logId: "", signature: "", recordedAt: "", at: null, version: -1,
+  };
+}
 
-/** An integer member by its value; 0 if it is missing, is no integer or lies outside the exact range (RFC 7493). */
-function readableSeq(value: Json | undefined): number {
-  return typeof value === "number" && Number.isInteger(value) && Math.abs(value) < 2 ** 53 ? value : 0;
+/** The version an entry names in its type; -1 if it names none. */
+function versionOf(entry: Entry): number {
+  const type = text(entry, "type");
+  if (!type.startsWith(TYPE_PREFIX)) return -1;
+  const digits = type.slice(TYPE_PREFIX.length);
+  return VERSION_NUMBER.test(digits) ? Number(digits) : -1;
 }
 
 /** Digest of one entry; throws if the entry is not I-JSON or cannot be canonicalized. */
@@ -119,179 +113,218 @@ export function entryDigest(text: string): string {
   return digest(parseRecorded(text));
 }
 
-/** Members that user interfaces show to humans: member, field (SPEC-v0 section 3.1 item 8). */
-const DISPLAYED_FIELDS = [
-  ["actor", "id"], ["agent", "display_name"], ["approval", "by"], ["template", "name"], ["approver", "id"],
-] as const;
-
-/** Members of a change that name the former value next to the current one: member, current, former (SPEC-v0 section 9.1). */
-const FORMER_VALUES = [
-  ["directory", "entity_id", "previous_entity_id"],
-  ["directory", "category", "previous_category"],
-  ["mandate", "digest", "previous_digest"],
-  ["template", "digest", "previous_digest"],
-  ["config", "value", "previous_value"],
-] as const;
-
-function member(entry: Entry, name: string): Entry | undefined {
-  const value = entry[name];
-  return isObject(value) ? value : undefined;
-}
-
-/** Whether every displayed member follows the rule for displayed text. */
-function displayedTextValid(entry: Entry): boolean {
-  return DISPLAYED_FIELDS.every(([name, field]) => {
-    const text = member(entry, name)?.[field];
-    return typeof text !== "string" || displayable(text);
-  });
-}
-
-/** Whether every change that names a former value names one other than the current one; JSON Schema cannot compare two members. */
-function formerValuesDistinct(entry: Entry): boolean {
-  return FORMER_VALUES.every(([name, current, former]) => {
-    const change = member(entry, name);
-    return typeof change?.[former] !== "string" || change[former] !== change[current];
-  });
-}
-
-/** Whether an areas_changed entry names two different sets of areas (SPEC-v0 sections 3.4 and 9.1): the order does not count. */
-function areasDistinct(entry: Entry): boolean {
-  const directory = member(entry, "directory");
-  const current = directory?.areas;
-  const former = directory?.previous_areas;
-  if (!Array.isArray(current) || !Array.isArray(former)) return true;
-  return current.length !== former.length || !current.every((area) => former.includes(area));
-}
-
-/** Whether a log.truncated entry accounts only for entries before itself: up_to_seq is smaller than its own seq (SPEC-v0 section 9.4). */
-function truncatesEarlier(entry: Entry): boolean {
-  const truncated = member(entry, "truncated");
-  return truncated === undefined || readableSeq(truncated.up_to_seq) < readableSeq(entry.seq);
-}
-
-/** Whether a log.exported entry names a range of entries before itself: from_seq ≤ to_seq < seq (SPEC-v0 section 9.1). */
-function exportsEarlier(entry: Entry): boolean {
-  const exported = member(entry, "exported");
-  if (exported === undefined) return true;
-  const [from, to] = [readableSeq(exported.from_seq), readableSeq(exported.to_seq)];
-  return from <= to && to < readableSeq(entry.seq);
-}
-
-function categoryOf(entry: Entry): string | undefined {
-  const request = member(entry, "request");
-  const category = isObject(request?.resource) ? request.resource.category : undefined;
-  return typeof category === "string" ? category : undefined;
-}
-
 /**
- * Whether an entry with evaluation.enforced names an action that may be left unenforced
- * (SPEC-v0 sections 9.1 and 9.4): in the vocabulary of its category and not critical
- * there. The schema cannot see the vocabulary. A category the verifier knows no
- * vocabulary for passes: its critical actions are unknown; the schema already requires the
- * category and rejects a resource marked critical.
+ * Checks a log entry by entry in file order and keeps only what the rest of the log can still
+ * depend on. Every entry is read: each finding needs the whole log.
  */
-function enforcedConsistent(entry: Entry, known: KnownActions): boolean {
-  if (member(entry, "evaluation")?.enforced === undefined) return true;
-  const category = categoryOf(entry);
-  const actions = category === undefined ? undefined : known.get(category)?.actions;
-  if (!actions) return true;
-  const action = member(entry, "request")?.action;
-  return typeof action === "string" && actions.get(action) === false;
-}
+class Verifier {
+  private count = 0;
+  /** The previous entry takes no part in the chain; the integrity finding names it already. */
+  private lost = false;
+  /** The newest known version so far; an older one after it breaks condition 1. */
+  private newest = 0;
+  private integrity: Finding | undefined;
+  private conformance: Finding | undefined;
+  private unknown: Finding | undefined;
+  private backwards: Finding | undefined;
+  private first = emptyLink(0, 0);
+  private previous = emptyLink(0, 0);
+  /** A log.truncated entry accounts for everything before the first entry, at coveredAt. */
+  private startCovered = false;
+  private coveredAt = 0;
+  /** The first violation of condition 3; reported only if nothing comes before it. */
+  private chainBreak: Finding | undefined;
+  /** The first violation of condition 4; it comes last. */
+  private checkpointBreak: Finding | undefined;
+  private logId = "";
+  private anchoredSeq = 0;
+  private readonly cadence = new Cadence();
+  /** An entry or a log.truncated entry stands for Anchor.lastSeen. */
+  private lastFound = false;
+  /** The log.truncated entry that stands for Anchor.lastSeen; it counts only if anchored. */
+  private lastTruncation: Finding | undefined;
 
-/**
- * Whether the vocabulary a decision entry names fits the category of its resource (SPEC-v0
- * section 9.1): the id of v0 for a category of v0, the id of the extension for a category
- * of an extension the verifier knows, and any id but that of v0 for another extension
- * category. The schema cannot see the vocabulary.
- */
-function vocabularyConsistent(entry: Entry, known: KnownActions): boolean {
-  const named = member(entry, "vocabulary");
-  if (named === undefined) return true;
-  const category = categoryOf(entry);
-  if (category === undefined || category === "") return true;
-  const defined = known.get(category);
-  return defined ? named.id === defined.id : named.id !== vocabularyId;
-}
+  private readonly known: KnownActions;
+  private readonly anchor: Anchor | undefined;
 
-function check(text: string, known: KnownActions): { link?: Link; seq: number } {
-  let value: Json;
-  try {
-    if (Buffer.byteLength(text, "utf8") > MAX_ENTRY_BYTES || !text.isWellFormed()) return { seq: 0 };
-    value = parseRecorded(text);
-  } catch {
-    return { seq: 0 };
+  constructor(known: KnownActions, anchor: Anchor | undefined) {
+    checkPosition(anchor?.lastSeen);
+    [this.known, this.anchor] = [known, anchor];
   }
-  const seq = isObject(value) ? readableSeq(value.seq) : 0;
-  if (!isObject(value) || !auditSchema(value)) return { seq };
-  if (!displayedTextValid(value) || !formerValuesDistinct(value) || !areasDistinct(value) || !truncatesEarlier(value) ||
-    !exportsEarlier(value) || !enforcedConsistent(value, known) || !vocabularyConsistent(value, known)) {
-    return { seq };
+
+  add(entryText: string): void {
+    const index = this.count++;
+    const l = this.check(index, entryText);
+    if (l.digest === "" || l.seq < 1) {
+      this.integrity ??= { index, at: l.seq };
+      this.lost = true;
+      return;
+    }
+    if (index === 0) {
+      this.first = l;
+    } else if (l.event === EVENT_TRUNCATED && l.upToSeq === this.first.seq - 1 && l.lastDigest === this.first.prev && !this.startCovered) {
+      [this.startCovered, this.coveredAt] = [true, l.seq];
+    }
+    if (index > 0 && !this.lost && (l.seq !== this.previous.seq + 1 || l.prev !== this.previous.digest)) {
+      this.integrity ??= { index, at: l.seq };
+      this.chainBreak ??= { index, at: l.seq };
+    }
+    // A checkpoint is checked whatever its version and whether or not it keeps the rules: it
+    // anchors the log, and an entry made unreadable on purpose must not escape it.
+    if (l.event === EVENT_CHECKPOINT && this.checkpointViolates(l)) {
+      this.integrity ??= { index, at: l.seq };
+      this.checkpointBreak ??= { index, at: l.seq };
+    }
+    if (this.anchor?.lastSeen && this.contradictsLastSeen(this.anchor.lastSeen, l)) this.breakCheckpoint(index, l.seq);
+    this.cadence.next(l);
+    if (index > 0 && l.at !== null && this.previous.at !== null && l.at < this.previous.at) this.backwards ??= { index, at: l.seq };
+    [this.previous, this.lost] = [l, false];
   }
-  let entryDigest: string;
-  try {
-    entryDigest = digest(value);
-  } catch {
-    return { seq };
+
+  /**
+   * Reads one entry. It takes no part in the chain (no digest) if it cannot be read or
+   * canonicalized. It is checked against the schema of its version and the rules of section 9.1
+   * if this verifier knows the version: a violation is a conformance finding, an unknown
+   * version a finding of its own. What the chain, the start and the checkpoints need is read
+   * from every entry: the integrity of a log does not depend on whether its writer kept the rules.
+   */
+  private check(index: number, entryText: string): Link {
+    let value: Json;
+    let corrected: boolean;
+    try {
+      if (Buffer.byteLength(entryText, "utf8") > MAX_ENTRY_BYTES || !entryText.isWellFormed()) throw new Error("unreadable");
+      ({ value, corrected } = parseAuditEntry(entryText));
+    } catch {
+      this.conformance ??= { index, at: 0 };
+      return emptyLink(index, 0);
+    }
+    const entry = isObject(value) ? value : undefined;
+    const l = emptyLink(index, readableSeq(entry?.seq));
+    let entryDigest = "";
+    try {
+      if (entry) entryDigest = digest(entry);
+    } catch {
+      // An entry without a digest breaks condition 1 and takes no part in the chain.
+    }
+    if (entry === undefined || entryDigest === "") {
+      this.conformance ??= { index, at: l.seq };
+      return l;
+    }
+    l.digest = entryDigest;
+    l.prev = text(entry, "prev");
+    l.version = versionOf(entry);
+    if (l.version < 0 || l.version < this.newest) {
+      // No audit version, or an older version after a newer one, known or not.
+      this.conformance ??= { index, at: l.seq };
+    } else if (l.version >= SCHEMAS.length) {
+      this.unknown ??= { index, at: l.seq };
+    } else if (!SCHEMAS[l.version]!(entry) || !keepsRules(entry, this.known) || (l.version >= FIRST_STRICT_VERSION && corrected)) {
+      this.conformance ??= { index, at: l.seq };
+    }
+    this.newest = Math.max(this.newest, l.version);
+    l.event = text(entry, "event");
+    l.at = parseTimestamp(text(entry, "recorded_at"))?.ns ?? null;
+    const checkpoint = member(entry, "checkpoint");
+    if (checkpoint) [l.logId, l.signature, l.recordedAt] = [text(checkpoint, "log_id"), text(checkpoint, "signature"), text(entry, "recorded_at")];
+    const truncated = member(entry, "truncated");
+    if (truncated) [l.upToSeq, l.lastDigest] = [readableSeq(truncated.up_to_seq), text(truncated, "last_digest")];
+    return l;
   }
-  return {
-    seq,
-    link: {
-      seq, prev: value.prev as string | null, digest: entryDigest, event: value.event as string,
-      recordedAt: typeof value.recorded_at === "string" ? value.recorded_at : "",
-      truncated: value.truncated as Link["truncated"], checkpoint: value.checkpoint as Link["checkpoint"],
-    },
-  };
+
+  /**
+   * Whether a checkpoint violates condition 4. One without a log_id or a signature cannot be
+   * checked, with keys or without, and breaks it like one whose signature does not verify.
+   */
+  private checkpointViolates(l: Link): boolean {
+    if (l.logId === "" || l.signature === "") return true;
+    if (this.logId === "") {
+      if (this.anchor?.logId && l.logId !== this.anchor.logId) return true;
+      this.logId = l.logId;
+    } else if (l.logId !== this.logId) {
+      return true;
+    }
+    if (!this.anchor) return false;
+    if (!signatureVerifies(l.logId, l.seq, l.prev, l.recordedAt, l.signature, this.anchor.keys)) return true;
+    this.anchoredSeq = l.seq - 1;
+    return false;
+  }
+
+  /**
+   * Whether an entry contradicts the position the relying party saw last: the entry at that
+   * seq has another digest, or a log.truncated entry for it binds another digest. A
+   * log.truncated entry that accounts for it counts only if a verified checkpoint anchors it,
+   * which finish checks: anyone who can write the log can write one.
+   */
+  private contradictsLastSeen(last: Position, l: Link): boolean {
+    if (l.seq === last.seq) {
+      [this.lastFound, this.lastTruncation] = [true, undefined];
+      return l.digest !== last.digest;
+    }
+    if (l.event === EVENT_TRUNCATED && l.upToSeq >= last.seq && !this.lastFound) {
+      if (l.upToSeq === last.seq && l.lastDigest !== last.digest) return true;
+      [this.lastFound, this.lastTruncation] = [true, { index: l.index, at: l.seq }];
+    }
+    return false;
+  }
+
+  /** Records a violation of condition 4, keeping the first in file order. */
+  private breakCheckpoint(index: number, at: number): void {
+    if (!this.integrity || index < this.integrity.index) this.integrity = { index, at };
+    if (!this.checkpointBreak || index < this.checkpointBreak.index) this.checkpointBreak = { index, at };
+  }
+
+  finish(): AuditResult {
+    if (this.anchor?.lastSeen && !this.lastFound) {
+      // The log ends before the position the relying party saw: it was cut or rolled back.
+      if (this.count === 0) return { valid: false, brokenAt: 0, entries: 0, integrityBrokenAt: 0 };
+      this.breakCheckpoint(this.count - 1, this.previous.seq);
+    }
+    if (this.lastTruncation && this.lastTruncation.at > this.anchoredSeq) this.breakCheckpoint(this.lastTruncation.index, this.lastTruncation.at);
+    const lostFirst = this.integrity?.index === 0;
+    if (this.count > 0 && this.first.seq !== 1 && !this.startCovered && !lostFirst) {
+      // Condition 2 is about the first entry: it comes before every other break of integrity.
+      this.integrity = { index: 0, at: this.first.seq };
+    }
+    const findings = {
+      ...(this.integrity && { integrityBrokenAt: this.integrity.at }),
+      ...(this.conformance && { conformanceBrokenAt: this.conformance.at }),
+      ...(this.unknown && { unknownVersionAt: this.unknown.at }),
+    };
+    const broken = (f: Finding): AuditResult => ({ valid: false, brokenAt: f.at, entries: 0, ...findings });
+    // Condition 1 first: an entry of an unknown version matches the schema of no version this verifier knows.
+    const condition1 = [this.conformance, this.unknown].filter((f) => f !== undefined).sort((a, b) => a.index - b.index)[0];
+    if (condition1) return broken(condition1);
+    if (this.count > 0 && this.first.seq !== 1 && !this.startCovered) return broken({ index: 0, at: this.first.seq });
+    if (this.chainBreak) return broken(this.chainBreak);
+    if (this.checkpointBreak) return broken(this.checkpointBreak);
+    // Fail closed: a log is valid exactly if there is no finding.
+    if (this.integrity) return broken(this.integrity);
+    if (this.count === 0) return this.anchor ? { valid: true, entries: 0, anchored: 0 } : { valid: true, entries: 0 };
+    const result: AuditResult = { valid: true, entries: this.count };
+    if (this.anchor) {
+      result.anchored = this.anchoredSeq;
+      result.firstSeq = this.first.seq;
+      if (this.first.seq !== 1) result.truncationAnchored = this.coveredAt <= this.anchoredSeq;
+    }
+    if (this.cadence.gap) result.checkpointGapAt = this.cadence.gap.at;
+    if (this.backwards) result.timeBackwards = this.backwards.at;
+    return result;
+  }
 }
 
 /** Verifies entries in file order: schema of all entries, start, chain, checkpoints. */
-export function verifyAudit(entries: string[], anchor?: Anchor): AuditResult {
+export function verifyAudit(entries: readonly string[], anchor?: Anchor): AuditResult {
   return verifyAuditWith(entries, anchor ? { anchor } : {});
 }
 
 /**
  * verifyAudit with options: an anchor and extension vocabularies. Throws if a vocabulary is
- * unreadable or redefines a category of v0.
+ * unreadable or redefines a category of v0, or if the anchor names a position no entry can have.
  */
 export function verifyAuditWith(entries: readonly string[], options: AuditOptions): AuditResult {
-  const known = knownActions(options.vocabularies);
-  const anchor = options.anchor;
-  const links: Link[] = [];
-  for (const text of entries) {
-    const { link, seq } = check(text, known);
-    if (!link) return { valid: false, brokenAt: seq, entries: 0 };
-    links.push(link);
-  }
-  if (links.length === 0) return anchor ? { valid: true, entries: 0, anchored: 0 } : { valid: true, entries: 0 };
-  const first = links[0]!;
-  const covered = links.slice(1).some(
-    (l) => l.event === "log.truncated" && l.truncated!.up_to_seq === first.seq - 1 && l.truncated!.last_digest === first.prev,
-  );
-  if (first.seq !== 1 && !covered) return { valid: false, brokenAt: first.seq, entries: 0 };
-  for (let i = 1; i < links.length; i++) {
-    const [previous, l] = [links[i - 1]!, links[i]!];
-    if (l.seq !== previous.seq + 1 || l.prev !== previous.digest) return { valid: false, brokenAt: l.seq, entries: 0 };
-  }
-  let logId = anchor?.logId ?? "";
-  let anchored = 0;
-  for (const l of links) {
-    if (l.event !== "log.checkpoint") continue;
-    const cp = l.checkpoint!;
-    if (logId === "") logId = cp.log_id;
-    let ok = cp.log_id === logId;
-    if (ok && anchor) {
-      // The signed statement: the log, the entry the checkpoint covers, and when it was made (SPEC-v0 section 9.5).
-      const payload = canonicalize({ type: "https://home-mandate.org/audit-checkpoint/v0", log_id: cp.log_id, seq: l.seq - 1, digest: l.prev, at: l.recordedAt });
-      try {
-        verifyDetached(cp.signature, payload, anchor.keys);
-        anchored = l.seq - 1;
-      } catch {
-        ok = false;
-      }
-    }
-    if (!ok) return { valid: false, brokenAt: l.seq, entries: 0 };
-  }
-  return anchor ? { valid: true, entries: links.length, anchored } : { valid: true, entries: links.length };
+  const verifier = new Verifier(knownActions(options.vocabularies), options.anchor);
+  for (const entry of entries) verifier.add(entry);
+  return verifier.finish();
 }
 
 /** Verifies a log in the exchange format: lines are separated by line feed only. */

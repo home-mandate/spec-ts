@@ -12,7 +12,7 @@ export {
 } from "./evaluate.ts";
 export {
   verifyAudit, verifyAuditLines, verifyAuditWith, verifyAuditLinesWith, verifyAuditBytes, verifyAuditLinesBytes, entryDigest,
-  type Anchor, type AuditOptions, type AuditResult,
+  type Anchor, type AuditOptions, type AuditResult, type Position,
 } from "./audit.ts";
 export { parseJwks, verifySigned, verifyDetached, SignatureError, type Keys } from "./jws.ts";
 export { displayable } from "./displaytext.ts";
