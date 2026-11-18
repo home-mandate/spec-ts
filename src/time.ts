@@ -62,12 +62,23 @@ export interface LocalTime {
   minute: number;
   /** 0 = Sunday. */
   weekday: number;
-  /** The calendar date, YYYY-MM-DD (SPEC-v0 section 4.2, conditions.dates). */
-  date: string;
+  /**
+   * The calendar date as year · 10000 + month · 100 + day (SPEC-v0 section 4.2,
+   * conditions.dates). Numbers, not text: in another zone a point in time of the year 9999
+   * can fall on a day of the year 10000, and one of the year 0001 on a day before it (the
+   * year 0 or earlier), and text would order "10000-01-01" before "1999-12-31".
+   */
+  day: number;
 }
 
-function isoDate(year: number, month: number, day: number): string {
-  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+/** The number of a calendar date, as LocalTime.day. */
+export function dayNumber(year: number, month: number, day: number): number {
+  return year * 10000 + month * 100 + day;
+}
+
+/** The number of a date YYYY-MM-DD that validDate accepts. */
+export function dateNumber(text: string): number {
+  return dayNumber(Number(text.slice(0, 4)), Number(text.slice(5, 7)), Number(text.slice(8, 10)));
 }
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -84,18 +95,20 @@ export function localTime(at: Instant, zone: string | undefined): LocalTime | nu
     const shifted = new Date(ms + at.offsetMinutes * 60000);
     return {
       minute: shifted.getUTCHours() * 60 + shifted.getUTCMinutes(), weekday: shifted.getUTCDay(),
-      date: isoDate(shifted.getUTCFullYear(), shifted.getUTCMonth() + 1, shifted.getUTCDate()),
+      day: dayNumber(shifted.getUTCFullYear(), shifted.getUTCMonth() + 1, shifted.getUTCDate()),
     };
   }
   if (!zoneKnown(zone)) return null;
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: zone, weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
-    year: "numeric", month: "2-digit", day: "2-digit",
+    year: "numeric", month: "2-digit", day: "2-digit", era: "short",
   }).formatToParts(new Date(ms));
   const part = (type: string) => parts.find((p) => p.type === type)!.value;
+  // Before the year 1 Intl counts years of the era BC: 1 BC is the year 0.
+  const year = part("era") === "BC" ? 1 - Number(part("year")) : Number(part("year"));
   return {
     minute: Number(part("hour")) * 60 + Number(part("minute")), weekday: WEEKDAYS.indexOf(part("weekday")),
-    date: isoDate(Number(part("year")), Number(part("month")), Number(part("day"))),
+    day: dayNumber(year, Number(part("month")), Number(part("day"))),
   };
 }
 

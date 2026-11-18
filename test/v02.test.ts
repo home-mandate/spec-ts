@@ -37,6 +37,12 @@ test("the model reads every member of the mandate schema", () => {
     approval: names(defs.approval),
     agent: names(schema.properties!.agent),
   };
+  // Every definition of the schema that has members is one of the objects above, so that a new
+  // object of a later release fails here as well.
+  const covered: Record<string, string> = { rule: "rule", resource: "resource", conditions: "conditions", rule_limits: "rule_limits", approval: "approval" };
+  for (const [name, def] of Object.entries(defs)) {
+    if (def.properties) assert.ok(name in covered, `$defs/${name} has members the guard does not compare`);
+  }
   for (const [object, members] of Object.entries(expected)) {
     assert.deepEqual([...MODEL_MEMBERS[object]!].sort(), members, `${object}: the schema and the model name different members`);
   }
@@ -92,4 +98,23 @@ test("evaluate names the limited rules of an allow", () => {
   assert.deepEqual(allowed.limited_rules, [allowed.rule_id]);
   const plain = answer({ op: "evaluate", mandate: example, request });
   assert.ok(!("limited_rules" in plain), "no member without limited rules");
+});
+
+// The local date of a point in time of the year 9999 can lie in the year 10000, and of the
+// year 0001 before it; neither may match a range of the years 1 to 9999 (SPEC-v0 section 4.2).
+test("a local date beyond the years 1 to 9999 matches no range of dates", async () => {
+  const { evaluate } = await import("../src/evaluate.ts");
+  const { parseMandate } = await import("../src/mandate.ts");
+  const mandate = parseMandate(JSON.stringify({
+    type: "https://home-mandate.org/mandate/v0", id: "m-dates", principal: "household:t",
+    agent: { client_id: "hm-client:test-0001", display_name: "Test" },
+    rules: [{ id: "r-1", resource: { category: "light" }, actions: ["turn_on"], decision: "allow", conditions: { dates: [{ from: "0001-01-01", to: "1999-12-31" }] } }],
+    default: "deny", approval: { timeout: "PT2M", approvers: ["a-1"] }, limits: { max_actions_per_hour: 10 },
+    valid_from: "0001-01-01T00:00:00Z", created_by: "a-1", created_at: "0001-01-01T00:00:00Z",
+  }));
+  const at = (time: string, timezone?: string) =>
+    evaluate(mandate, { resource: { entity_id: "light.a", category: "light" }, action: "turn_on", time, timezone }).reason;
+  assert.equal(at("9999-12-31T23:59:59Z", "Asia/Tokyo"), "no_match", "the year 10000 in Tokyo");
+  assert.equal(at("9999-12-31T23:59:59+14:00"), "no_match", "the year 10000 by the offset");
+  assert.equal(at("1999-12-31T12:00:00Z", "Asia/Tokyo"), "rule", "the last day of the range");
 });

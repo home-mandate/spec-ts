@@ -85,7 +85,7 @@ function restrictionsAllow(jwk: { [key: string]: Json }, alg: "EdDSA" | "ES256")
  * point is not on its curve verifies nothing itself and leaves the set usable. Members a
  * key type does not have, such as y of an Ed25519 key, are ignored (RFC 7517 section 4).
  */
-export function parseJwks(jwks: string | Json): Keys {
+export function parseJwks(jwks: string | Exclude<Json, string>): Keys {
   let set: Json = jwks;
   if (typeof jwks === "string") {
     if (Buffer.byteLength(jwks, "utf8") > MAX_KEY_SET_BYTES) throw new SignatureError("JWK Set larger than 64 KiB");

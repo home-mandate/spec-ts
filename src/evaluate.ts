@@ -106,7 +106,7 @@ function matches(rule: Rule, req: Request, at: Instant, local: LocalTime): boole
     if (!inside) return false;
   }
   if (rule.weekdays && !rule.weekdays.includes(local.weekday)) return false;
-  if (rule.dates && !rule.dates.some((d) => d.from <= local.date && local.date <= d.to)) return false;
+  if (rule.dates && !rule.dates.some((d) => d.fromDay <= local.day && local.day <= d.toDay)) return false;
   return rule.constraints.every((c) => {
     const value = req.parameters !== undefined && Object.hasOwn(req.parameters, c.parameter) ? req.parameters[c.parameter] : undefined;
     if (value === undefined) return false;

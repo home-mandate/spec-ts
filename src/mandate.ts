@@ -8,7 +8,7 @@ import { declares, MAX_ONE_OF, type ParameterValue, validValue } from "./paramet
 import { validateMandate } from "./generated/mandate-validator.ts";
 import { describeViolation, type SchemaValidator } from "./schema-runtime.ts";
 import { vocabulary } from "./spec-data.ts";
-import { type Instant, parseTimestamp, validDate } from "./time.ts";
+import { dateNumber, type Instant, parseTimestamp, validDate } from "./time.ts";
 
 export class MandateError extends Error {}
 
@@ -43,10 +43,15 @@ export interface Period {
   until: Instant | null;
 }
 
-/** A range of calendar dates, both inclusive, as YYYY-MM-DD (SPEC-v0 section 4.2). */
+/**
+ * A range of calendar dates, both inclusive (SPEC-v0 section 4.2): as written, and as the
+ * numbers of LocalTime.day that the evaluation compares.
+ */
 export interface DateRange {
   from: string;
   to: string;
+  fromDay: number;
+  toDay: number;
 }
 
 /** The limits a rule sets of its own (SPEC-v0 section 11.2); 0 does not limit. */
@@ -111,7 +116,7 @@ export interface Mandate {
 }
 
 /**
- * The members of the mandate schema this model reads, by object. test/members.test.ts
+ * The members of the mandate schema this model reads, by object. test/v02.test.ts
  * compares them with spec/schema/mandate-v0.schema.json: a member the schema gains in a
  * later release would otherwise be accepted by the schema and ignored by the evaluation,
  * which fails open. Members that are only displayed or compared as text count as read.
@@ -220,7 +225,7 @@ function dates(id: string, raw: Json): DateRange[] {
   return (raw as { from: string; to: string }[]).map(({ from, to }) => {
     if (!validDate(from) || !validDate(to)) fail(`rule ${id}: a date that does not exist`);
     if (from > to) fail(`rule ${id}: dates from ${from} is after to ${to}`);
-    return { from, to };
+    return { from, to, fromDay: dateNumber(from), toDay: dateNumber(to) };
   });
 }
 
