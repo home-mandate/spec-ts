@@ -7,7 +7,9 @@ import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as library from "../src/index.ts";
-import { entryDigest, parseJwks, verifyAudit, verifyAuditLines, verifySigned, type Json } from "../src/index.ts";
+import {
+  entryDigest, parseJwks, verifyAudit, verifyAuditBytes, verifyAuditLines, verifyAuditLinesBytes, verifySigned, type Json,
+} from "../src/index.ts";
 import { answer, readMessage } from "../src/harness.ts";
 import { specFile } from "../src/spec.ts";
 import { type Case, cases, mandateConformance } from "./cases.ts";
@@ -19,7 +21,7 @@ test("signed mandates", () => {
     // A key set with a key that cannot be used verifies nothing (SPEC-v0 section 10.2).
     let keys;
     try {
-      keys = parseJwks(JSON.parse(specFile(c.keys)) as Json);
+      keys = parseJwks(specFile(c.keys));
     } catch {
       assert.equal(c.expected, "invalid", `${c.id}: ${c.why}`);
       continue;
@@ -33,9 +35,12 @@ test("audit logs", () => {
   // The entries are read from the file text, so that number spellings survive.
   const text = specFile("conformance/audit-v0.json");
   for (const c of cases("conformance/audit-v0.json", "logs")) {
-    const anchor = c.keys ? { keys: parseJwks(JSON.parse(specFile(c.keys)) as Json), logId: c.log_id } : undefined;
+    const anchor = c.keys ? { keys: parseJwks(specFile(c.keys)), logId: c.log_id } : undefined;
     const entries: string[] = (c.entries ?? []).map((e: Json) => JSON.stringify(e));
-    const result = c.jsonl !== undefined ? verifyAuditLines(c.jsonl, anchor) : verifyAudit(entries, anchor);
+    const bytes = (b64: string) => Buffer.from(b64, "base64");
+    const result = c.jsonl_base64 !== undefined ? verifyAuditLinesBytes(bytes(c.jsonl_base64), anchor)
+      : c.entries_base64 !== undefined ? verifyAuditBytes(c.entries_base64.map(bytes), anchor)
+      : c.jsonl !== undefined ? verifyAuditLines(c.jsonl, anchor) : verifyAudit(entries, anchor);
     assert.equal(result.valid, c.expected === "valid", `${c.id}: ${c.why}`);
     if (!result.valid) assert.equal(result.brokenAt, c.broken_at, `${c.id}: ${c.why}`);
     if (c.anchored !== undefined) assert.equal(result.anchored, c.anchored, `${c.id}: ${c.why}`);
@@ -67,7 +72,8 @@ test("harness answers every operation and rejects unknown ones", () => {
   assert.match(pkg.homeMandateSpec, /^v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/);
   assert.deepEqual(answer({ op: "dance" }), { error: "unsupported" });
   assert.deepEqual(answer({ op: "validate", mandate: "{" }), { valid: false });
-  assert.deepEqual(answer({ op: "entry_digest", entry: '{"a":1,"a":2}' }), { valid: false });
+  // An entry without a digest is answered with an error alone (SPEC-v0 section 10.2).
+  assert.deepEqual(answer({ op: "entry_digest", entry: '{"a":1,"a":2}' }), { error: "entry without a digest" });
   const example = specFile("examples/voice-assistant.json");
   const response = answer({
     op: "evaluate", mandate: example,

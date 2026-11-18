@@ -7,8 +7,8 @@
 // test/browser.test.ts checks the import graph of this module and runs the conformance
 // cases of the specification against it.
 export {
-  parseMandate, tryParseMandate, MandateError, timeoutSeconds,
-  type Mandate, type Rule, type RuleText, type Decision, type Approval, type Constraint,
+  parseMandate, tryParseMandate, parseMandateBytes, tryParseMandateBytes, MandateError, timeoutSeconds,
+  type Mandate, type Rule, type RuleText, type Decision, type Approval, type Constraint, type Period, type DateRange, type RuleLimits,
 } from "./mandate.ts";
 export { exactNumber } from "./number.ts";
 export type { ParameterValue } from "./parameters.ts";

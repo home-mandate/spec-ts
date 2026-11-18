@@ -12,6 +12,8 @@ export const shippedMandates: readonly string[] = [...specJsonFiles("examples"),
 export const parsedMandates: readonly Mandate[] = shippedMandates.map((text) => parseMandate(text));
 
 /** The invalid mandates of the conformance cases, as text. */
+// A case given as bytes (mandate_base64) seeds its bytes read as UTF-8, with replacement
+// characters where they are not.
 export const invalidMandates: readonly string[] = cases("conformance/invalid-v0.json").map(
-  (c) => c.mandate_raw ?? JSON.stringify(c.mandate_inline),
+  (c) => c.mandate_raw ?? (c.mandate_base64 !== undefined ? Buffer.from(c.mandate_base64, "base64").toString("utf8") : JSON.stringify(c.mandate_inline)),
 );

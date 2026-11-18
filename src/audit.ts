@@ -308,3 +308,39 @@ export function verifyAuditLinesWith(jsonl: string, options: AuditOptions): Audi
   if (lines[lines.length - 1] === "") lines.pop(); // the final line feed is optional
   return verifyAuditWith(lines.map((line) => (line.endsWith("\r") ? line.slice(0, -1) : line)), options);
 }
+
+const UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+
+/**
+ * The text of an entry given as bytes. Bytes that are not UTF-8 become a text that is not
+ * well formed, which no entry is (SPEC-v0 sections 3.1 item 1 and 9.4); a byte order mark is
+ * kept and makes the entry unreadable.
+ */
+function entryText(bytes: Uint8Array): string {
+  try {
+    return UTF8.decode(bytes);
+  } catch {
+    return "\uD800";
+  }
+}
+
+/** verifyAudit for entries given as the bytes they were stored as. */
+export function verifyAuditBytes(entries: readonly Uint8Array[], anchor?: Anchor): AuditResult {
+  return verifyAuditWith(entries.map(entryText), anchor ? { anchor } : {});
+}
+
+/**
+ * verifyAuditLines for the exchange format given as bytes: the lines are split at the byte of
+ * the line feed first, so that bytes that are not UTF-8 make only their own line unreadable.
+ */
+export function verifyAuditLinesBytes(jsonl: Uint8Array, anchor?: Anchor): AuditResult {
+  const lines: string[] = [];
+  let start = 0;
+  for (let i = 0; i <= jsonl.length; i++) {
+    if (i === jsonl.length || jsonl[i] === 0x0a) {
+      lines.push(entryText(jsonl.subarray(start, i)));
+      start = i + 1;
+    }
+  }
+  return verifyAuditLinesWith(lines.join("\n"), anchor ? { anchor } : {});
+}

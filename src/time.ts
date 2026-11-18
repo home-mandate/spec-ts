@@ -41,11 +41,33 @@ export function validTimestamp(text: string): boolean {
   return parseTimestamp(text) !== null;
 }
 
+const DATE = /^([0-9]{4})-([0-9]{2})-([0-9]{2})$/;
+
+/**
+ * Whether text is a calendar date of RFC 3339 (full-date) of a day that exists, not in the
+ * year 0000 (SPEC-v0 section 3.1 item 0, conditions.dates). Such dates order like their text.
+ */
+export function validDate(text: string): boolean {
+  const m = DATE.exec(text);
+  if (!m) return false;
+  const [year, month, day] = m.slice(1, 4).map(Number) as [number, number, number];
+  if (year === 0) return false;
+  const date = new Date(0);
+  date.setUTCFullYear(year, month - 1, day);
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
 export interface LocalTime {
   /** Minutes since midnight; seconds are truncated. */
   minute: number;
   /** 0 = Sunday. */
   weekday: number;
+  /** The calendar date, YYYY-MM-DD (SPEC-v0 section 4.2, conditions.dates). */
+  date: string;
+}
+
+function isoDate(year: number, month: number, day: number): string {
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -60,14 +82,21 @@ export function localTime(at: Instant, zone: string | undefined): LocalTime | nu
   const ms = Number(floorDiv(at.ns, 1000000n));
   if (!zone) {
     const shifted = new Date(ms + at.offsetMinutes * 60000);
-    return { minute: shifted.getUTCHours() * 60 + shifted.getUTCMinutes(), weekday: shifted.getUTCDay() };
+    return {
+      minute: shifted.getUTCHours() * 60 + shifted.getUTCMinutes(), weekday: shifted.getUTCDay(),
+      date: isoDate(shifted.getUTCFullYear(), shifted.getUTCMonth() + 1, shifted.getUTCDate()),
+    };
   }
   if (!zoneKnown(zone)) return null;
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: zone, weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+    year: "numeric", month: "2-digit", day: "2-digit",
   }).formatToParts(new Date(ms));
   const part = (type: string) => parts.find((p) => p.type === type)!.value;
-  return { minute: Number(part("hour")) * 60 + Number(part("minute")), weekday: WEEKDAYS.indexOf(part("weekday")) };
+  return {
+    minute: Number(part("hour")) * 60 + Number(part("minute")), weekday: WEEKDAYS.indexOf(part("weekday")),
+    date: isoDate(Number(part("year")), Number(part("month")), Number(part("day"))),
+  };
 }
 
 const ZONE_PART = /^[A-Z][A-Za-z0-9_+-]*$/;

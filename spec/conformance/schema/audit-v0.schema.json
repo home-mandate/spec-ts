@@ -36,6 +36,12 @@
               "invalid"
             ]
           },
+          "requires": {
+            "enum": [
+              "ES256"
+            ],
+            "description": "An optional algorithm the case needs (SPEC-v0 sections 7.1 and 10.2): an implementation without it answers unsupported, and the case does not count for its class."
+          },
           "broken_at": {
             "type": "integer",
             "minimum": 0,
@@ -56,6 +62,19 @@
             "type": "string",
             "description": "The log in the exchange format (SPEC-v0 section 9.4) as one string, for cases about line separators."
           },
+          "entries_base64": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+            },
+            "description": "Entries in file order as bytes in base64 with padding (RFC 4648 section 4), for cases about bytes (SPEC-v0 section 10.2)."
+          },
+          "jsonl_base64": {
+            "type": "string",
+            "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+            "description": "The log in the exchange format as bytes in base64 with padding (RFC 4648 section 4), for cases about bytes (SPEC-v0 section 10.2)."
+          },
           "keys": {
             "type": "string",
             "description": "Path to a JWK Set with the public keys that may sign checkpoints of the log (SPEC-v0 section 9.5), relative to the repository root. If present, the signatures of checkpoints are verified."
@@ -68,6 +87,26 @@
             "type": "integer",
             "minimum": 0,
             "description": "For a valid log verified with keys: the seq up to which a verified checkpoint covers the log; 0 if none."
+          },
+          "integrity_broken_at": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "seq of the first entry at which the log is not complete and unaltered (SPEC-v0 section 9.4); 0 if it has no readable seq; absent if there is none."
+          },
+          "conformance_broken_at": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "seq of the first entry of a known audit version that breaks condition 1 (SPEC-v0 section 9.4); 0 if it has no readable seq; absent if there is none."
+          },
+          "unknown_version_at": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "seq of the first entry of an audit version the verifier does not know (SPEC-v0 sections 9.4 and 14); absent if there is none."
+          },
+          "checkpoint_gap_at": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "For a valid log with a checkpoint: seq of the first entry at which the writer did not keep the cadence of checkpoints (SPEC-v0 section 9.5); absent if there is none."
           }
         },
         "if": {
@@ -98,6 +137,16 @@
           {
             "required": [
               "jsonl"
+            ]
+          },
+          {
+            "required": [
+              "entries_base64"
+            ]
+          },
+          {
+            "required": [
+              "jsonl_base64"
             ]
           }
         ]

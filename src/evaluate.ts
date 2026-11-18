@@ -57,6 +57,12 @@ export interface Result {
    * the approval settings in approval. Absent: no confirmation beyond the decision.
    */
   confirm?: true;
+  /**
+   * For an allow only: the ids of the matching rules that carry limits of their own, in
+   * document order (SPEC-v0 sections 4.1 and 11.2). The caller checks their counts after the
+   * evaluation and denies with denied_by rate_limit if one has no room. Absent: none.
+   */
+  limited_rules?: string[];
 }
 
 /** Whether the areas are a set of at most 16 area identifiers without duplicates. */
@@ -83,7 +89,7 @@ function validParameters(req: Request): boolean {
 
 const STRICTNESS: Record<Decision, number> = { allow: 0, ask: 1, deny: 2 };
 
-function matches(rule: Rule, req: Request, local: LocalTime): boolean {
+function matches(rule: Rule, req: Request, at: Instant, local: LocalTime): boolean {
   const s = rule.resource;
   const resource = s.any === true ||
     ((s.entity_id === undefined || s.entity_id === req.resource.entity_id) &&
@@ -91,16 +97,22 @@ function matches(rule: Rule, req: Request, local: LocalTime): boolean {
       (s.area === undefined || (req.resource.areas ?? []).includes(s.area)));
   if (!resource) return false;
   if (!rule.actions.includes("*") && !rule.actions.includes(req.action)) return false;
+  // A rule's own period compares points in time (SPEC-v0 section 4, step 2).
+  if (rule.period.from && at.ns < rule.period.from.ns) return false;
+  if (rule.period.until && at.ns >= rule.period.until.ns) return false;
   if (rule.window) {
     const { start, end } = rule.window;
     const inside = start < end ? local.minute >= start && local.minute < end : local.minute >= start || local.minute < end;
     if (!inside) return false;
   }
   if (rule.weekdays && !rule.weekdays.includes(local.weekday)) return false;
+  if (rule.dates && !rule.dates.some((d) => d.from <= local.date && local.date <= d.to)) return false;
   return rule.constraints.every((c) => {
     const value = req.parameters !== undefined && Object.hasOwn(req.parameters, c.parameter) ? req.parameters[c.parameter] : undefined;
     if (value === undefined) return false;
     if (c.oneOf !== null) return c.oneOf.includes(value);
+    // A value of another type than the list never satisfies it (SPEC-v0 section 4.5).
+    if (c.noneOf !== null) return typeof value === typeof c.noneOf[0] && !c.noneOf.includes(value);
     return typeof value === "number" && value >= c.min && value <= c.max;
   });
 }
@@ -138,8 +150,12 @@ export function evaluate(mandate: Mandate | null, req: Request): Result {
   if (at.ns < mandate.validFrom.ns) return deny("not_yet_valid", mandate);
   if (mandate.expires && at.ns >= mandate.expires.ns) return deny("expired", mandate);
 
-  const matched = mandate.rules.filter((r) => matches(r, req, local));
+  const matched = mandate.rules.filter((r) => matches(r, req, at, local));
   const result = decide(mandate, matched, req);
+  if (result.decision === "allow") {
+    const limited = matched.filter((r) => r.limits !== null).map((r) => r.id);
+    if (limited.length > 0) result.limited_rules = limited;
+  }
   // Audit mode (section 4.6): only a deny by the rules, never one of a critical action.
   const notEnforced = !mandate.enforce && result.decision === "deny" && !isCritical(req.resource, req.action);
   if (!notEnforced) return result;
@@ -244,6 +260,14 @@ export function selectAndEvaluate(stored: Stored[], clientId: string, principal:
     if (concerns(s, mandate, clientId, principal)) documents.push({ mandate, revoked: s.revoked === true });
   }
   const candidates = documents.filter((d) => !d.revoked).map((d) => d.mandate);
+  if (at === null) {
+    // Without a readable point in time nothing can be current: a sole candidate is selected,
+    // several cannot be told apart (SPEC-v0 sections 4.3 step 3 and 10.2).
+    if (candidates.length === 0) return revokedOnly(documents.filter((d) => d.revoked));
+    if (candidates.length > 1) return { selected: null, result: deny("invalid_request") };
+    const sole = candidates[0]!;
+    return { selected: sole, result: evaluate(sole, { ...req, revoked: false }) };
+  }
   const current = candidates.filter(
     (m) => m === null || (at !== null && at.ns >= m.validFrom.ns && (!m.expires || at.ns < m.expires.ns)),
   );

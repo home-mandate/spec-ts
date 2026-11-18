@@ -56,6 +56,18 @@ not critical carries `enforced: false`: the caller executes the request and reco
 the approval settings of that `ask` in `approval`: the caller executes the request only after a
 confirmation, as an `ask` (sections 4.1 and 4.6).
 
+An `allow` names in `limited_rules` the matching rules that carry limits of their own
+(`max_actions_per_hour`, `max_actions_per_day`, `min_interval`, in `mandate.rules[i].limits`).
+The caller counts them after the evaluation, all or nothing, in addition to the limit of the
+mandate (`mandate.maxActions`), and denies with `denied_by: rate_limit` if one has no room
+(sections 4.1 and 11.2). A rule outside its own `valid_from` and `expires`, or outside its
+`conditions.dates` in household local time, does not match (sections 4 and 4.2).
+
+A document that arrives as bytes is read with `parseMandateBytes(bytes)`, which takes them as
+UTF-8 without decoding them any other way first, so that a byte order mark or bytes that are
+not UTF-8 make it invalid (section 3.1 item 1); `verifyAuditBytes` and `verifyAuditLinesBytes`
+do the same for audit logs.
+
 A request carries exactly the parameters its action declares (section 4, step 0): one the
 action does not declare, a missing required parameter (`mode` of `alarm.arm`) and none or
 more than one of the alternatives it requires one of (`climate.set_temperature`) yield
@@ -67,6 +79,11 @@ rule (section 3.5) and `needsConfirmation(stored, storedRevoked, offered)` says 
 accepted successor takes effect only after a human confirmed it: it switches audit mode on,
 follows a revoked mandate, or does not merely narrow the stored one (`narrows`).
 
+`parseJwks(text)` reads a key set from its text: at most 64 KiB, strict I-JSON, and all or
+nothing: a key that `use`, `key_ops` or `alg` exclude, a key of another type, or a key without a
+`kid` makes the set verify nothing, while a P-256 key that is not a point of its curve only
+verifies nothing itself (section 7.1, section 14 bullet **Key sets**). A key set given as a
+parsed value is taken as it is.
 `verifySigned(jws, issuer, keys)` verifies a signed mandate (section 7.1): canonical payload,
 `alg` matching the key, canonical EdDSA encodings, and a mandate with `issuer`, `version`,
 `audience` and `expires`. Whether the `audience` is the verifier's own is the caller's check.
