@@ -68,6 +68,12 @@ UTF-8 without decoding them any other way first, so that a byte order mark or by
 not UTF-8 make it invalid (section 3.1 item 1); `verifyAuditBytes` and `verifyAuditLinesBytes`
 do the same for audit logs.
 
+A long log is verified as it arrives with `await verifyAuditStream(source, { anchor })`, from
+any `AsyncIterable` of bytes or text, such as `fs.createReadStream(path)` or the body of a
+`fetch` response. It holds a line only until it ends, and of a line longer than an entry only
+enough to see that it is too long, so memory does not grow with the log; the result is that of
+`verifyAuditLinesBytes` for the same bytes.
+
 A request carries exactly the parameters its action declares (section 4, step 0): one the
 action does not declare, a missing required parameter (`mode` of `alarm.arm`) and none or
 more than one of the alternatives it requires one of (`climate.set_temperature`) yield

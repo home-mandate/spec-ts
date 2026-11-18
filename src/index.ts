@@ -11,7 +11,7 @@ export {
   type Request, type Resource, type Result, type Stored,
 } from "./evaluate.ts";
 export {
-  verifyAudit, verifyAuditLines, verifyAuditWith, verifyAuditLinesWith, verifyAuditBytes, verifyAuditLinesBytes, entryDigest,
+  verifyAudit, verifyAuditLines, verifyAuditWith, verifyAuditLinesWith, verifyAuditBytes, verifyAuditLinesBytes, verifyAuditStream, entryDigest,
   type Anchor, type AuditOptions, type AuditResult, type Position,
 } from "./audit.ts";
 export { parseJwks, verifySigned, verifyDetached, SignatureError, type Keys } from "./jws.ts";
