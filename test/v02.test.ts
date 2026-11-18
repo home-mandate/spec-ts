@@ -118,3 +118,34 @@ test("a local date beyond the years 1 to 9999 matches no range of dates", async 
   assert.equal(at("9999-12-31T23:59:59+14:00"), "no_match", "the year 10000 by the offset");
   assert.equal(at("1999-12-31T12:00:00Z", "Asia/Tokyo"), "rule", "the last day of the range");
 });
+
+test("the harness splits requests at the line feed only, not at U+2028", async () => {
+  const { requestLines } = await import("../src/harness.ts");
+  async function* chunks() {
+    yield Buffer.from('{"op":"entry_digest","entry":"{\\"a\\":\\"x y\\"}"}\n{"op":"capa', "utf8");
+    yield "bilities\"}\n";
+  }
+  const lines: string[] = [];
+  for await (const line of requestLines(chunks())) lines.push(line);
+  assert.equal(lines.length, 2);
+  assert.ok("digest" in JSON.parse(respond(lines[0]!)), "one answer for the request with U+2028");
+});
+
+test("verify_audit with members of the wrong type is malformed, never valid", () => {
+  for (const bad of [{ entries: "" }, { entries: [1] }, { entries: [null] }, { jsonl: 5 }, { jsonl_base64: 1 }, { log_id: 1, entries: [] }]) {
+    assert.deepEqual(answer({ op: "verify_audit", ...bad }), { error: "malformed request" }, JSON.stringify(bad));
+  }
+  const keys = specFile("conformance/keys/test-keys.json");
+  const digest = "sha256:" + "a".repeat(64);
+  assert.ok("error" in answer({ op: "verify_audit", entries: [], keys, last_seen: { seq: 1.5, digest } }), "seq 1.5");
+  // A seq no entry can have is never found: the log breaks, it is no error (SPEC-v0 section 9.5).
+  const far = JSON.parse(respond(`{"op":"verify_audit","entries":[],"keys":${JSON.stringify(keys)},"last_seen":{"seq":9007199254740993,"digest":"${digest}"}}`));
+  assert.equal(far.valid, false);
+  assert.ok("error" in JSON.parse(respond(`{"op":"verify_audit","entries":[],"keys":${JSON.stringify(keys)},"last_seen":{"seq":1.0,"digest":"${digest}"}}`)), "seq 1.0");
+});
+
+test("JSON nested deeper than 32 levels has no digest", () => {
+  const nested = (n: number) => '{"a":'.repeat(n - 1) + "{}" + "}".repeat(n - 1);
+  assert.ok("digest" in answer({ op: "entry_digest", entry: nested(32) }), "32 levels");
+  assert.deepEqual(answer({ op: "entry_digest", entry: nested(33) }), { error: "entry without a digest" }, "33 levels");
+});

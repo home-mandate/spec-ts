@@ -81,8 +81,10 @@ class Parser {
   }
 
   value(depth: number): Json {
-    if (depth > MAX_DEPTH) throw new JsonError("nesting too deep");
     const c = this.text[this.pos];
+    // depth is the number of containers around the value: a container at depth 32 would be
+    // the 33rd, deeper than 32 levels (SPEC-v0 sections 3.1 and 9.4).
+    if ((c === "{" || c === "[") && depth >= MAX_DEPTH) throw new JsonError("nesting deeper than 32");
     if (c === "{") return this.object(depth);
     if (c === "[") return this.array(depth);
     if (c === '"') return this.string();

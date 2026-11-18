@@ -39,7 +39,8 @@ export interface Anchor {
 export function checkPosition(position: Position | undefined): void {
   if (position === undefined) return;
   const { seq, digest } = position;
-  if (!Number.isSafeInteger(seq) || seq < 1 || typeof digest !== "string" || !DIGEST.test(digest)) {
+  // A seq beyond 2^53 is one no entry can have: it is never found, and the log breaks (condition 4).
+  if (!Number.isInteger(seq) || seq < 1 || typeof digest !== "string" || !DIGEST.test(digest)) {
     throw new Error(`audit: the last entry seen needs a seq of at least 1 and a digest, got ${String(seq)} and ${JSON.stringify(digest)}`);
   }
 }

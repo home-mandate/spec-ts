@@ -4,7 +4,6 @@
 // Harness for the process binding of the test interface (SPEC-v0 section 10.2): one
 // JSON request per line on standard input, one JSON response per line on standard output.
 import { readFileSync } from "node:fs";
-import { createInterface } from "node:readline";
 import {
   entryDigest, verifyAudit, verifyAuditBytes, verifyAuditLines, verifyAuditLinesBytes, type Anchor, type AuditResult, type Position,
 } from "./audit.ts";
@@ -89,8 +88,13 @@ export function undefinedMember(m: Message): string | undefined {
  * such as 50.00000000000000000001 is no integer (SPEC-v0 section 4.5).
  */
 export function readMessage(line: string): Message {
-  const exact = (_key: string, value: unknown, context?: { source?: string }): unknown =>
-    typeof value === "number" && context?.source !== undefined ? exactNumber(context.source) : value;
+  // The seq of last_seen, the only seq a request carries, is an integer in integer spelling:
+  // 1.0 and 1e2 are refused, as the reference refuses them.
+  const exact = (key: string, value: unknown, context?: { source?: string }): unknown => {
+    if (typeof value !== "number" || context?.source === undefined) return value;
+    if (key === "seq" && !/^-?[0-9]+$/.test(context.source)) return NaN;
+    return exactNumber(context.source);
+  };
   return JSON.parse(line, exact as never) as Message;
 }
 
@@ -133,10 +137,32 @@ function outcome(r: Result): object {
   return out;
 }
 
-/** The position of last_seen (SPEC-v0 section 10.2): seq and digest; verifyAudit checks their values. */
+/**
+ * The position of last_seen (SPEC-v0 section 10.2): seq and digest; verifyAudit checks their
+ * values. readMessage keeps the spelling of a number that is no exact integer, so 1.0 and 1e2
+ * are refused here, as the reference refuses them.
+ */
 function position(value: Json): Position {
-  if (!isObject(value) || typeof value.seq !== "number" || typeof value.digest !== "string") throw new Error("last_seen is not a position");
+  if (!isObject(value) || typeof value.digest !== "string" || typeof value.seq !== "number" || !Number.isInteger(value.seq)) {
+    throw new Error("last_seen is not a position");
+  }
   return { seq: value.seq, digest: value.digest };
+}
+
+/** Whether value is an array of strings, as entries and entries_base64 are. */
+function strings(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((v) => typeof v === "string");
+}
+
+/**
+ * The members of verify_audit have the types of SPEC-v0 section 10.2; a request with another
+ * type is malformed and never verified, so that a garbled request cannot come back valid.
+ */
+function auditMembersMalformed(m: Message): boolean {
+  const text = (v: unknown) => v === undefined || typeof v === "string";
+  return !text(m.jsonl) || !text(m.jsonl_base64) || !text(m.keys) || !text(m.log_id) ||
+    (m.entries !== undefined && !strings(m.entries)) || (m.entries_base64 !== undefined && !strings(m.entries_base64)) ||
+    (m.last_seen !== undefined && !isObject(m.last_seen));
 }
 
 /** The response to verify_audit (SPEC-v0 section 10.2): the verdict and the findings of section 9.4. */
@@ -186,6 +212,7 @@ export function answer(m: Message): object {
         return { valid: false };
       }
     case "verify_audit": {
+      if (auditMembersMalformed(m)) return { error: "malformed request" };
       let anchor: Anchor | undefined;
       if (m.keys !== undefined) {
         anchor = { keys: parseJwks(keysText(m.keys)), logId: m.log_id || undefined };
@@ -197,10 +224,8 @@ export function answer(m: Message): object {
       if (forms > 1) return { error: "more than one of jsonl, entries, jsonl_base64 and entries_base64" };
       let r;
       if (m.jsonl_base64 !== undefined) r = verifyAuditLinesBytes(base64Bytes(m.jsonl_base64, "jsonl_base64"), anchor);
-      else if (m.entries_base64 !== undefined) {
-        if (!Array.isArray(m.entries_base64)) return { error: "entries_base64 is not an array" };
-        r = verifyAuditBytes(m.entries_base64.map((e) => base64Bytes(e, "entries_base64")), anchor);
-      } else r = m.jsonl !== undefined ? verifyAuditLines(m.jsonl, anchor) : verifyAudit(m.entries ?? [], anchor);
+      else if (m.entries_base64 !== undefined) r = verifyAuditBytes(m.entries_base64.map((e) => base64Bytes(e, "entries_base64")), anchor);
+      else r = m.jsonl !== undefined ? verifyAuditLines(m.jsonl, anchor) : verifyAudit(m.entries ?? [], anchor);
       return auditResponse(r);
     }
     case "entry_digest":
@@ -225,10 +250,29 @@ export function respond(line: string): string {
   return JSON.stringify(response);
 }
 
+/**
+ * The request lines of the process binding, split at the line feed only (SPEC-v0 section
+ * 10.2). readline would also end a line at U+2028 and U+2029, which a JSON string may carry
+ * unescaped, and one request would get two answers.
+ */
+export async function* requestLines(input: AsyncIterable<Buffer | string>): AsyncGenerator<string> {
+  const decoder = new TextDecoder("utf-8");
+  let rest = "";
+  for await (const chunk of input) {
+    rest += typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true });
+    let end: number;
+    while ((end = rest.indexOf("\n")) !== -1) {
+      yield rest.slice(0, end);
+      rest = rest.slice(end + 1);
+    }
+  }
+  rest += decoder.decode();
+  if (rest !== "") yield rest;
+}
+
 if ((import.meta as { main?: boolean }).main) {
-  const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
-  for await (const line of lines) {
-    if (line === "") continue;
+  for await (const line of requestLines(process.stdin)) {
+    if (line === "") continue; // as the reference does; a line of white space is answered
     process.stdout.write(respond(line) + "\n");
   }
 }
