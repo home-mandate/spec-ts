@@ -335,14 +335,25 @@ export function verifyAuditLines(jsonl: string, anchor?: Anchor): AuditResult {
 /**
  * verifyAuditLines with options (verifyAuditWith). A carriage return before the line feed
  * is white space around the value and not part of the entry's size (SPEC-v0 section 9.4).
+ * The lines are taken one after another from the text, without a list of them.
  */
 export function verifyAuditLinesWith(jsonl: string, options: AuditOptions): AuditResult {
-  const lines = jsonl.split("\n");
-  if (lines[lines.length - 1] === "") lines.pop(); // the final line feed is optional
-  return verifyAuditWith(lines.map((line) => (line.endsWith("\r") ? line.slice(0, -1) : line)), options);
+  const verifier = new Verifier(knownActions(options.vocabularies), options.anchor);
+  let start = 0;
+  while (start < jsonl.length) {
+    let end = jsonl.indexOf("\n", start);
+    if (end === -1) end = jsonl.length; // the final line feed is optional
+    const line = jsonl.slice(start, end);
+    verifier.add(line.endsWith("\r") ? line.slice(0, -1) : line);
+    start = end + 1;
+  }
+  return verifier.finish();
 }
 
 const UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+
+/** The text of an entry that cannot be read: not well formed, so that no entry is it. */
+const UNREADABLE = "\uD800";
 
 /**
  * The text of an entry given as bytes. Bytes that are not UTF-8 become a text that is not
@@ -353,7 +364,7 @@ function entryText(bytes: Uint8Array): string {
   try {
     return UTF8.decode(bytes);
   } catch {
-    return "\uD800";
+    return UNREADABLE;
   }
 }
 
@@ -363,17 +374,89 @@ export function verifyAuditBytes(entries: readonly Uint8Array[], anchor?: Anchor
 }
 
 /**
+ * The longest line kept: an entry and the carriage return before its line feed. A longer line
+ * is unreadable whatever follows (SPEC-v0 section 9.4), so the rest of it is not kept.
+ */
+const MAX_LINE_BYTES = MAX_ENTRY_BYTES + 1;
+
+/**
+ * Splits the exchange format, arriving in pieces of bytes, into lines at the byte of the line
+ * feed (SPEC-v0 section 9.4) and passes each to the verifier as it ends: bytes that are not
+ * UTF-8 make only their own line unreadable, and of a line longer than an entry only as much
+ * is held as shows that it is too long. The final line feed is optional.
+ */
+class LineReader {
+  private parts: Uint8Array[] = [];
+  private length = 0;
+  private tooLong = false;
+  private readonly verifier: Verifier;
+
+  constructor(verifier: Verifier) {
+    this.verifier = verifier;
+  }
+
+  push(chunk: Uint8Array): void {
+    let start = 0;
+    for (let end = chunk.indexOf(0x0a); end !== -1; end = chunk.indexOf(0x0a, start)) {
+      this.hold(chunk.subarray(start, end));
+      this.endLine();
+      start = end + 1;
+    }
+    this.hold(chunk.subarray(start));
+  }
+
+  /** Ends the input: a last line without a line feed is a line. */
+  end(): void {
+    if (this.length > 0 || this.tooLong) this.endLine();
+  }
+
+  private hold(bytes: Uint8Array): void {
+    if (this.tooLong || bytes.length === 0) return;
+    if (this.length + bytes.length > MAX_LINE_BYTES) {
+      [this.parts, this.length, this.tooLong] = [[], 0, true];
+      return;
+    }
+    // A copy, so that the caller may reuse its buffer for the next piece.
+    this.parts.push(Uint8Array.from(bytes));
+    this.length += bytes.length;
+  }
+
+  private endLine(): void {
+    let text = UNREADABLE;
+    if (!this.tooLong) {
+      const bytes = this.parts.length === 1 ? this.parts[0]! : Buffer.concat(this.parts);
+      const line = bytes[bytes.length - 1] === 0x0d ? bytes.subarray(0, bytes.length - 1) : bytes;
+      text = entryText(line);
+    }
+    this.verifier.add(text);
+    [this.parts, this.length, this.tooLong] = [[], 0, false];
+  }
+}
+
+/**
  * verifyAuditLines for the exchange format given as bytes: the lines are split at the byte of
  * the line feed first, so that bytes that are not UTF-8 make only their own line unreadable.
  */
 export function verifyAuditLinesBytes(jsonl: Uint8Array, anchor?: Anchor): AuditResult {
-  const lines: string[] = [];
-  let start = 0;
-  for (let i = 0; i <= jsonl.length; i++) {
-    if (i === jsonl.length || jsonl[i] === 0x0a) {
-      lines.push(entryText(jsonl.subarray(start, i)));
-      start = i + 1;
-    }
-  }
-  return verifyAuditLinesWith(lines.join("\n"), anchor ? { anchor } : {});
+  const verifier = new Verifier(knownActions(undefined), anchor);
+  const reader = new LineReader(verifier);
+  reader.push(jsonl);
+  reader.end();
+  return verifier.finish();
+}
+
+const ENCODER = new TextEncoder();
+
+/**
+ * Verifies a log in the exchange format as it arrives, in bounded memory: from a file, a
+ * socket or a fetch body, in pieces of any size. Pieces of text are read as their UTF-8
+ * bytes. The result is that of verifyAuditLinesBytes for the same bytes (issue #49); the
+ * verifier keeps only what the rest of the log can depend on, and a line only until it ends.
+ */
+export async function verifyAuditStream(source: AsyncIterable<Uint8Array | string>, options: AuditOptions = {}): Promise<AuditResult> {
+  const verifier = new Verifier(knownActions(options.vocabularies), options.anchor);
+  const reader = new LineReader(verifier);
+  for await (const piece of source) reader.push(typeof piece === "string" ? ENCODER.encode(piece) : piece);
+  reader.end();
+  return verifier.finish();
 }
