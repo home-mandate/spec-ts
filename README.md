@@ -20,7 +20,7 @@ It exists for two reasons:
 - **Use in JavaScript and TypeScript**, for example to check a mandate in a user interface
   before it is stored, also in a web browser (see below).
 
-Status: implements the release candidate `v0.2.0-rc.4` of the specification; the last released version, `v0.1.1`, is implemented by npm `0.1.2`.
+Status: implements the specification `v0.2.0`; npm `0.2.0`.
 
 ## Install
 
@@ -156,7 +156,7 @@ the specification against this entry, also with code generation from strings dis
   <img src="https://raw.githubusercontent.com/home-mandate/.github/main/marks/compatible-light.svg" alt="Home-Mandate compatible" width="96" align="left">
 </picture>
 
-This implementation conforms to the Home-Mandate Specification `v0.2.0-rc.4` in the classes
+This implementation conforms to the Home-Mandate Specification `v0.2.0` in the classes
 `evaluator`, `selection`, `signatures`, `audit` and `audit-anchored` (SPEC-v0 section 8.1),
 tested with the specification's test tool `mandate-conformance` on every pull request.
 Security problems: [SECURITY.md](SECURITY.md).
@@ -214,6 +214,7 @@ format v0 → 0.x, format v1 → 1.x. Which exact specification tag it implement
 | v0.1.1 (first version on npm) | v0.1.0 |
 | v0.1.2 | v0.1.1 |
 | v0.2.0-rc.1 | v0.2.0-rc.4 |
+| v0.2.0 | v0.2.0 |
 
 Since the specification's `v0.1.0`, the v0 formats (mandate, audit entry, audit checkpoint)
 are frozen; an incompatible change comes with a new format major. Reading v0 data as part
