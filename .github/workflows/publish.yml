@@ -17,10 +17,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Before anything reaches npm, which cannot be taken back: the tag must point to a commit on
-  # main, for a patch on release/X.Y (.github/scripts/release-base.sh), that came from a pull
-  # request into that branch whose checks all passed. Here too, not only in release.yml: npm's
-  # trusted publisher is bound to this file.
+  # Before anything reaches npm, which cannot be taken back: the same guard as in release.yml
+  # (where the tag stands, the pull request and its checks, a version is a release candidate
+  # that passed), and the release of the tag is published. Here too, not only in release.yml:
+  # npm's trusted publisher is bound to this file.
   verify:
     name: Check the tag
     runs-on: ubuntu-24.04
@@ -29,20 +29,31 @@ jobs:
       contents: read
       pull-requests: read # the pull request the commit came from
       checks: read # its checks
+      actions: read # the run of the release candidate a version stands on
+    outputs:
+      version: ${{ steps.verify.outputs.version }}
+      base: ${{ steps.verify.outputs.base }}
     steps:
+      - name: A tag, not a branch
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          [ "$REF_TYPE" = tag ] || { echo "::error::run this workflow on a tag"; exit 1; }
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0 # the branches' history, to check where the tag points
+          fetch-depth: 0 # the branches' history and the tags, to check where the tag stands
           persist-credentials: false
 
-      - name: Where the tag stands and the pull request's checks
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-          base=$(bash .github/scripts/release-base.sh "$TAG" "$GITHUB_SHA")
-          bash .github/scripts/pr-checks.sh "$base" "$GITHUB_SHA" "Type check and tests" "Conformance (" "Fuzz ("
+      - id: verify
+        uses: home-mandate/.github/actions/release-verify@f73af670bc516d6556a0203315b90c0c6554852f
+        with:
+          tag: ${{ github.ref_name }}
+          release: published
+          required-checks: |
+            Type check and tests
+            Conformance (
+            Fuzz (
 
   package:
     name: Build and test the package
@@ -52,19 +63,9 @@ jobs:
     permissions:
       contents: read
     env:
-      TAG: ${{ github.ref_name }}
-      REF_TYPE: ${{ github.ref_type }}
+      VERSION: ${{ needs.verify.outputs.version }}
+      BASE: ${{ needs.verify.outputs.base }}
     steps:
-      # With read access only a published release is visible, not a draft.
-      - name: Check the tag and the published release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if [[ "$REF_TYPE" != tag || ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-z]+\.[0-9]+)?$ ]]; then
-            echo "::error::$TAG is not a release tag"; exit 1
-          fi
-          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null
-
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -79,12 +80,17 @@ jobs:
         with:
           go-version: stable
 
-      - name: Check the version against the tag
+      # package.json carries X.Y.Z. A release candidate is that commit with the tag's suffix:
+      # the version is set here, before anything is built, tested or packed.
+      - name: The version in package.json, and the suffix of a release candidate
         run: |
+          set -euo pipefail
           version="$(node -p 'require("./package.json").version')"
-          if [ "v$version" != "$TAG" ]; then
-            echo "::error::version $version in package.json does not match $TAG"; exit 1
+          if [ "$version" != "$BASE" ]; then
+            echo "::error::package.json has version $version, the tag $BASE"; exit 1
           fi
+          if [ "$VERSION" != "$BASE" ]; then npm pkg set "version=$VERSION"; fi
+          echo "packing $(node -p 'require("./package.json").version')"
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
