@@ -1,27 +1,45 @@
 # SPDX-License-Identifier: Apache-2.0
 name: Release
 
-# A tag vX.Y.Z, vX.Y.Z-alpha.N or vX.Y.Z-rc.N publishes a GitHub release with the conformance
+# A tag vX.Y.0-alpha.N, vX.Y.Z-rc.N or vX.Y.Z publishes a GitHub release with the conformance
 # report of that commit (conformance-report.yml), then starts publish.yml, which publishes the
 # package to npm. The release is created as a draft, the report is attached to the draft, and
 # only a draft with the attested report is published. A published release is immutable
 # (repository setting), so nothing can be added or replaced afterwards; a failed run leaves a
 # draft and needs a new version.
 #
+# A release is a tag, not a commit (RELEASING.md of the organization): package.json carries
+# X.Y.Z, and the jobs that build a release candidate set X.Y.Z-rc.N from the tag. A release
+# candidate is tagged on release/X.Y, published, and then runs the release gate: long fuzzing
+# of every target, and the conformance run against the package as npm serves it. The version
+# is tagged on the commit of a release candidate whose gate passed.
+#
 # Guards: only admins and the maintainer may create tags and tags are immutable (repository
-# rulesets). The tag must point to a commit on main, for a patch on release/X.Y
-# (.github/scripts/release-base.sh), that came from a pull request into that branch whose
-# checks all passed (.github/scripts/pr-checks.sh), it must match the version in package.json,
-# and the release must not exist. publish.yml checks the tag again before anything reaches npm.
+# rulesets). Before anything is published, home-mandate/.github/actions/release-verify checks
+# where the tag stands, that the commit came from a merged pull request whose checks passed,
+# that a version is a release candidate that passed, and that the release doesn't exist. Here:
+# the tag matches the version in package.json, and a version names a version of the
+# specification, not a release candidate. publish.yml checks the tag again before anything
+# reaches npm.
+#
+# Run by hand with a tag name, the workflow only checks whether that tag could be released
+# from the head of the chosen branch, and publishes nothing. Do it before every tag:
+#   gh workflow run release.yml --ref release/X.Y -f tag=vX.Y.Z-rc.1
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Dry run: the tag to check on the head of this branch. Publishes nothing."
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.tag || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -33,43 +51,49 @@ jobs:
       contents: read
       pull-requests: read # the pull request the commit came from
       checks: read # its checks
+      actions: read # the run of the release candidate a version stands on
     outputs:
-      prerelease: ${{ steps.version.outputs.prerelease }}
+      version: ${{ steps.verify.outputs.version }}
+      kind: ${{ steps.verify.outputs.kind }}
+      prerelease: ${{ steps.verify.outputs.prerelease }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0 # the branches' history, to check where the tag points
+          fetch-depth: 0 # the branches' history and the tags, to check where the tag stands
           persist-credentials: false
 
-      - name: Tag, branch, version and the pull request's checks
-        id: version
+      - id: verify
+        uses: home-mandate/.github/actions/release-verify@f73af670bc516d6556a0203315b90c0c6554852f
+        with:
+          tag: ${{ inputs.tag || github.ref_name }}
+          required-checks: |
+            Type check and tests
+            Conformance (
+            Fuzz (
+
+      - name: The version and the specification in package.json
         env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          BASE: ${{ steps.verify.outputs.base }}
+          KIND: ${{ steps.verify.outputs.kind }}
         run: |
           set -euo pipefail
           version="$(node -p 'require("./package.json").version')"
-          if [ "v$version" != "$TAG" ]; then
-            echo "::error::version $version in package.json does not match $TAG"; exit 1
+          if [ "$version" != "$BASE" ]; then
+            echo "::error::package.json has version $version, the tag $BASE"; exit 1
           fi
-          base=$(bash .github/scripts/release-base.sh "$TAG" "$GITHUB_SHA")
-          bash .github/scripts/pr-checks.sh "$base" "$GITHUB_SHA" "Type check and tests" "Conformance (" "Fuzz ("
-          prerelease=false
-          if [[ "$TAG" == *-* ]]; then prerelease=true; fi
-          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
-
-      - name: Not released yet
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
-        run: |
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
-            echo "::error::release $TAG exists already"; exit 1
+          spec="$(node -p 'require("./package.json").homeMandateSpec')"
+          if ! [[ "$spec" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|rc)\.[0-9]+)?$ ]]; then
+            echo "::error::homeMandateSpec in package.json is not a tag: $spec"; exit 1
+          fi
+          # What becomes a version names versions (RELEASING.md, "Releases that depend on each other").
+          if [ "$KIND" = version ] && [[ "$spec" == *-* ]]; then
+            echo "::error::a version must name a version of the specification, not $spec"; exit 1
           fi
 
   release:
     name: Create the draft
     needs: verify
+    if: github.event_name == 'push'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -102,7 +126,7 @@ jobs:
     with:
       tag: ${{ github.ref_name }}
 
-  # The gate: the draft becomes the release only with the attested report attached.
+  # The draft becomes the release only with the attested report attached.
   publish:
     name: Publish the release
     needs: conformance-report
@@ -142,3 +166,114 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: gh workflow run publish.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG"
+
+  # The release gate, for a release candidate only: what is too long for every pull request,
+  # and what can only be checked once the package is out.
+  fuzz-targets:
+    name: Fuzz targets
+    needs: [verify, npm]
+    if: needs.verify.outputs.kind == 'rc'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      targets: ${{ steps.list.outputs.targets }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: list
+        run: echo "targets=$(ls test/fuzz/*.fuzz.ts | sed 's#.*/##; s#\.fuzz\.ts$##' | jq -R . | jq -cs .)" >> "$GITHUB_OUTPUT"
+
+  # 20 minutes per target, side by side. The fuzzing here draws its inputs anew every run, so
+  # there is no corpus to start from.
+  fuzz:
+    name: Fuzz (long, ${{ matrix.target }})
+    needs: fuzz-targets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.fuzz-targets.outputs.targets) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        with:
+          version: 12.8.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node --test "test/fuzz/$TARGET.fuzz.ts"
+        env:
+          TARGET: ${{ matrix.target }}
+          FUZZ_TIME: 1200 # seconds
+      # A failure is written to fuzz-failures/ with its seed and path; keep it to reproduce
+      # the failure.
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzz-failures-${{ matrix.target }}
+          path: fuzz-failures/
+          if-no-files-found: ignore
+
+  # publish.yml is a run of its own; that this one succeeded doesn't say the package arrived.
+  # So the gate installs the release candidate from npm, as a user does, and runs the test
+  # tool of the specification against it.
+  package:
+    name: Conformance of the package on npm
+    needs: [verify, npm]
+    if: needs.verify.outputs.kind == 'rc'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      VERSION: ${{ needs.verify.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+      - name: Wait for the package on npm
+        run: |
+          for _ in $(seq 1 80); do
+            if [ "$(npm view "@home-mandate/spec@$VERSION" version 2> /dev/null)" = "$VERSION" ]; then exit 0; fi
+            sleep 15
+          done
+          echo "::error::@home-mandate/spec@$VERSION is not on npm after 20 minutes (see the run of publish.yml)"; exit 1
+      - name: Install it and run mandate-conformance against it
+        run: |
+          set -euo pipefail
+          spec="$(node -p 'require("./package.json").homeMandateSpec')"
+          case "$spec" in v[0-9]*) ;; *) echo "homeMandateSpec in package.json is not a tag: $spec"; exit 1 ;; esac
+          consumer="$RUNNER_TEMP/consumer"
+          mkdir -p "$consumer"
+          cd "$consumer"
+          echo '{"name":"consumer","private":true,"type":"module"}' > package.json
+          npm install --ignore-scripts --no-audit --no-fund "@home-mandate/spec@$VERSION"
+          go install "github.com/home-mandate/spec/cmd/mandate-conformance@$spec"
+          "$(go env GOPATH)/bin/mandate-conformance" -report "$RUNNER_TEMP/report.json" \
+            -classes evaluator,selection,signatures,audit,audit-anchored \
+            -exec "$consumer/node_modules/.bin/mandate-harness-ts"
+
+  # The job release-verify looks for before a version may stand on this commit: it succeeds
+  # only if the release candidate reached npm and every part of the gate passed.
+  gate:
+    name: Release gate
+    needs: [verify, npm, fuzz-targets, fuzz, package]
+    if: always() && github.event_name == 'push' && needs.verify.outputs.kind == 'rc'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "verify, npm, fuzz-targets, fuzz, package: $RESULTS"
+          [ "$RESULTS" = "success success success success success" ]
