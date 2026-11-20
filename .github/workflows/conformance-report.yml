@@ -62,6 +62,18 @@ jobs:
           go-version: stable
       - run: pnpm install --frozen-lockfile
 
+      # The report names the release: package.json carries X.Y.Z, a release candidate adds
+      # the suffix of its tag (the harness reads its version from package.json).
+      - name: The version of the tag
+        run: |
+          set -euo pipefail
+          version="$(node -p 'require("./package.json").version')"
+          case "${TAG#v}" in
+            "$version") ;;
+            "$version"-*) npm pkg set "version=${TAG#v}" ;;
+            *) echo "::error::package.json has version $version, the tag ${TAG#v}"; exit 1 ;;
+          esac
+
       - name: Run mandate-conformance
         run: |
           spec="$(node -p 'require("./package.json").homeMandateSpec')"
